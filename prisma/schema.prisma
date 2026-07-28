@@ -1,0 +1,153 @@
+// The voidix content database.
+//
+// Two layers live here, and the distinction is the whole design:
+//
+//   1. The EDITING tables (services, projects, faq_entries + their ordered children).
+//      These are the working draft. Editing them changes nothing on the live site.
+//   2. content_releases — an append-only log of published snapshots. Pressing "Publish"
+//      serialises the current draft into one JSON payload shaped exactly like the site's
+//      TypeScript arrays. The site reads the newest release; the editor never sees it.
+//
+// That split is what makes the Publish button mean something: you can leave a half-written
+// answer in the draft tables for a week and the site keeps serving the last release.
+//
+// Column widths are not defensive padding — they come from the layouts these strings land
+// in (a four-across carousel row, a one-line kicker). See docs/admin-content-schema.md §7.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A service = one vessel on the ServicesDeck carousel. Text only.
+///
+/// Deliberately has no create/delete path in the admin UI: a service is bound to a .glb
+/// model, a hull palette, and a placement entry in the site's deckTuning.ts that is keyed by
+/// ARRAY POSITION. Adding one needs a model authored and tuned; reordering or deleting one
+/// silently rebinds every ship's placement to the wrong vessel. `slug` exists so the site can
+/// later key off a stable id instead of position — that refactor is the prerequisite for ever
+/// making this list reorderable.
+model Service {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// Stable identity the site can key placement data off. Never shown to visitors.
+  slug        String   @unique @db.VarChar(64)
+  /// Position in the deck. Renders as the "01".."04" ordinal — derived, never typed.
+  sortOrder   Int      @map("sort_order")
+  /// Short label in the bottom carousel strip. Four of these sit in one row.
+  name        String   @db.VarChar(80)
+  /// One-line poetic kicker above the description.
+  eyebrow     String   @db.VarChar(120)
+  description String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  capabilities ServiceCapability[]
+
+  @@index([sortOrder])
+  @@map("services")
+}
+
+/// Tag chips under a service description. Ordered, individually rendered.
+model ServiceCapability {
+  id        String @id @default(uuid()) @db.Uuid
+  serviceId String @map("service_id") @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(40)
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("service_capabilities")
+}
+
+/// A project in the Works field. Free to add, remove and reorder.
+///
+/// One caveat the CMS cannot solve: each project is a rock you fly to, and the rock geometry
+/// stays in the site's source. A project added here renders with the global fallback rock, so
+/// several text-only additions in a row will read as the same body repeated.
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique @db.VarChar(64)
+  sortOrder   Int      @map("sort_order")
+  title       String   @db.VarChar(80)
+  /// Who it was built for, or the context. Renders as "{client} · {year}".
+  client      String   @db.VarChar(120)
+  /// A string, not an integer — the site renders it raw and allows things like "2026".
+  year        String   @db.VarChar(8)
+  description String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tags ProjectTag[]
+
+  @@index([sortOrder])
+  @@map("projects")
+}
+
+/// Capability / tech chips under a project description. Ordered.
+model ProjectTag {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(40)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+  @@map("project_tags")
+}
+
+/// A question in the Chamber hologram. The freest section in the system — the hologram
+/// measures its own content and moves its frames to fit, so length and count cost nothing.
+model FaqEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  sortOrder Int      @map("sort_order")
+  question  String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  paragraphs FaqParagraph[]
+
+  @@index([sortOrder])
+  @@map("faq_entries")
+}
+
+/// One paragraph of an answer. The site renders each as its own <p>, so this is a child
+/// table rather than one blob with newlines in it.
+model FaqParagraph {
+  id         String @id @default(uuid()) @db.Uuid
+  faqEntryId String @map("faq_entry_id") @db.Uuid
+  sortOrder  Int    @map("sort_order")
+  body       String
+
+  entry FaqEntry @relation(fields: [faqEntryId], references: [id], onDelete: Cascade)
+
+  @@index([faqEntryId, sortOrder])
+  @@map("faq_paragraphs")
+}
+
+/// An immutable published snapshot. Append-only: publishing writes a new row, it never
+/// updates an old one, so every release stays inspectable and restorable.
+model ContentRelease {
+  id      String @id @default(uuid()) @db.Uuid
+  /// Monotonic, human-readable release number. v1, v2, v3…
+  version Int    @unique
+  /// The whole site payload, shaped exactly like the site's TS arrays.
+  payload Json
+  /// Optional note from whoever published ("fixed the FAQ typo").
+  note    String? @db.VarChar(200)
+  /// Email of the admin who pressed Publish.
+  publishedBy String?  @map("published_by") @db.VarChar(320)
+  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  /// Outcome of pinging the site's revalidate hook: skipped | ok | failed.
+  /// "skipped" is the expected value until the site is actually wired up.
+  revalidateStatus String? @map("revalidate_status") @db.VarChar(16)
+  revalidateDetail String? @map("revalidate_detail")
+
+  @@index([publishedAt])
+  @@map("content_releases")
+}

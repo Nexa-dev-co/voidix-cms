@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/*
+ * The panel borrows the site's design tokens verbatim (app/globals.css in orbix-dev) so an
+ * editor moving between the CMS and the live site doesn't feel like they've changed product.
+ * If a token changes on the site, change it here too — these are copies, not imports.
+ */
+:root {
+  --bg: #060606;
+  --fg: #ebe8e0;
+  --muted: rgba(235, 232, 224, 0.38);
+  --accent: #00e5ff;
+  --border: rgba(235, 232, 224, 0.08);
+  --card: #0d0d0d;
+
+  /* Panel-only additions — the site has no forms, so it never needed these. */
+  --border-strong: rgba(235, 232, 224, 0.16);
+  --field: #0a0a0a;
+  --danger: #ff6b5e;
+  --warning: #ffb24d;
+  --success: #3ddc97;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-card: var(--card);
+  --color-field: var(--field);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+
+  --font-display: var(--font-syne);
+  --font-sans: var(--font-dm-sans);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Small uppercased kicker above a heading — the site's `.eyebrow` helper. */
+.eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* The default ring is a blurry halo against near-black; a hard accent outline reads better
+   and keeps keyboard focus genuinely visible on every surface in the panel. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input,
+textarea {
+  field-sizing: content;
+}
+
+/* Firefox still needs an explicit colour pair for the scrollbar to not blow out the dark UI. */
+* {
+  scrollbar-color: var(--border-strong) transparent;
+}
