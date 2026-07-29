@@ -32,7 +32,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${syne.variable} ${dmSans.variable} h-full antialiased`}>
-      <body className="font-sans min-h-full flex flex-col bg-bg text-fg">{children}</body>
+      {/*
+        suppressHydrationWarning is scoped to <body> and covers exactly one real problem:
+        browser extensions inject attributes here before React hydrates (ColorZilla adds
+        `cz-shortcut-listen`, password managers and Grammarly add their own), and React counts
+        that as a mismatch it can't reconcile. It suppresses the warning for THIS element's
+        attributes only — children still hydrate normally and a genuine markup mismatch inside
+        the app is still reported.
+      */}
+      <body
+        suppressHydrationWarning
+        className="font-sans min-h-full flex flex-col bg-bg text-fg"
+      >
+        {children}
+      </body>
     </html>
   );
 }

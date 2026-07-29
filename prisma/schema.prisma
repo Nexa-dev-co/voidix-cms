@@ -130,6 +130,307 @@ model FaqParagraph {
   @@map("faq_paragraphs")
 }
 
+/// The Contact section's copy, including the strings the form itself renders.
+///
+/// A singleton — there is only ever one contact section, so it uses a fixed primary key
+/// (`SINGLETON_ROW_ID`) and is written with `upsert` rather than create/update. That is
+/// simpler and safer than a table that could accidentally hold two rows and leave the site
+/// picking one arbitrarily.
+///
+/// The site has no Contact section yet; the navbar links to `#contact` and nothing is there.
+/// This is seeded with placeholder copy in the voidix voice, the same way worksProjects.ts
+/// ships placeholders today.
+model ContactSection {
+  id String @id
+
+  eyebrow     String @db.VarChar(120)
+  titleLine1  String @map("title_line_1") @db.VarChar(60)
+  titleLine2  String @map("title_line_2") @db.VarChar(60)
+  description String
+  /// The address shown to visitors. Not where leads are delivered — that's the site's job.
+  emailAddress String @map("email_address") @db.VarChar(320)
+
+  formNameLabel    String @map("form_name_label") @db.VarChar(60)
+  formEmailLabel   String @map("form_email_label") @db.VarChar(60)
+  formMessageLabel String @map("form_message_label") @db.VarChar(60)
+  submitLabel      String @map("submit_label") @db.VarChar(40)
+  successMessage   String @map("success_message") @db.VarChar(200)
+  errorMessage     String @map("error_message") @db.VarChar(200)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("contact_section")
+}
+
+/// Footer sign-off copy. Singleton, same as ContactSection. Links live in their own ordered
+/// tables so they can be reordered without rewriting a blob.
+model FooterContent {
+  id String @id
+
+  tagline   String @db.VarChar(120)
+  copyright String @db.VarChar(120)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("footer_content")
+}
+
+/// Social destinations in the footer. Ordered.
+model FooterSocialLink {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(40)
+  url       String @db.VarChar(500)
+
+  @@index([sortOrder])
+  @@map("footer_social_links")
+}
+
+/// Privacy / terms style links in the footer. Ordered. Separate from social because the two
+/// render in different places and a single list would need a "kind" column doing the same job.
+model FooterLegalLink {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(40)
+  url       String @db.VarChar(500)
+
+  @@index([sortOrder])
+  @@map("footer_legal_links")
+}
+
+enum LeadStatus {
+  NEW
+  READ
+  ARCHIVED
+
+  @@map("lead_status")
+}
+
+enum TeamRole {
+  /// Everything: site copy, publishing, leads, and managing the team.
+  ADMIN
+  /// Leads only. Cannot read or edit site copy, cannot publish, cannot delete a contact.
+  SALES
+
+  @@map("team_role")
+}
+
+/// Someone who can log in.
+///
+/// Mirrors a Supabase Auth user rather than replacing it — Auth still owns passwords and
+/// sessions; this row owns the role and the display name. It exists because roles need to be
+/// queryable (to list who a contact can be assigned to) and Auth's user table is not readable
+/// from the app without the service role key.
+///
+/// Linked by `email` on first sign-in, which is why the email here must match the one the
+/// account was created with.
+model TeamMember {
+  id String @id @default(uuid()) @db.Uuid
+  /// Supabase `auth.users.id`, filled in the first time this person signs in.
+  authUserId String? @unique @map("auth_user_id") @db.Uuid
+  email      String  @unique @db.VarChar(320)
+  name       String  @db.VarChar(120)
+  role       TeamRole @default(SALES)
+  /// Revokes access without deleting the row, so their name still renders on contacts they
+  /// used to own. Deleting the person would orphan that history.
+  isActive   Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assignedContacts Contact[]
+  importBatches    ImportBatch[]
+  attempts         ContactAttempt[]
+
+  @@map("team_members")
+}
+
+/// A person. One row per human, identified by email.
+///
+/// This is the half of the old flat `Lead` table that describes *who* — everything about
+/// their approaches lives in `Enquiry`. Splitting the two is what makes duplicates
+/// structurally impossible: a second contact-form submission from the same address is another
+/// enquiry on this row, not a competing copy of it. That matters most once contacts are
+/// assigned to individual salespeople, because two rows for one human means two owners.
+model Contact {
+  id String @id @default(uuid()) @db.Uuid
+  /// Stored lowercased and trimmed — the unique index is what enforces one row per person, so
+  /// casing must be normalised before it reaches the database.
+  email   String  @unique @db.VarChar(320)
+  name    String  @db.VarChar(120)
+  company String? @db.VarChar(120)
+  /// Imported prospect lists almost always carry one, and a sales team needs it.
+  phone   String? @db.VarChar(40)
+
+  status LeadStatus @default(NEW)
+  /// Internal working notes. Never leaves the panel.
+  notes  String?
+
+  assignedToId String?     @map("assigned_to_id") @db.Uuid
+  assignedTo   TeamMember? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedAt   DateTime?   @map("assigned_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  enquiries Enquiry[]
+  attempts  ContactAttempt[]
+
+  @@index([status, createdAt])
+  @@index([assignedToId, status])
+  @@map("contacts")
+}
+
+enum EnquirySource {
+  /// Arrived through POST /api/leads from the site's form.
+  CONTACT_FORM
+  /// Typed in by an admin.
+  MANUAL
+  /// Appeared in an uploaded spreadsheet.
+  IMPORT
+
+  @@map("enquiry_source")
+}
+
+/// One touchpoint with a contact: a form submission, a manual entry, or an appearance in an
+/// imported list. Append-only in practice — this is the history that makes "third time they've
+/// reached out" visible instead of hidden.
+model Enquiry {
+  id        String  @id @default(uuid()) @db.Uuid
+  contactId String  @map("contact_id") @db.Uuid
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  source EnquirySource
+  /// What they actually said. Null for import events, which carry no message.
+  message String?
+
+  importBatchId String?      @map("import_batch_id") @db.Uuid
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  /// Only ever set for CONTACT_FORM. Salted hash, never a raw address — see the intake module.
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([contactId, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("enquiries")
+}
+
+/// A logged attempt to reach a contact — a call, an email, a meeting.
+///
+/// Separate from `Enquiry` because the direction is opposite: an enquiry is them reaching us,
+/// an attempt is us reaching them. Mixing the two would make "have we chased this lead?"
+/// unanswerable.
+///
+/// `channel` and `outcome` are stored as text snapshots rather than foreign keys into the
+/// editable vocabulary. An admin renaming "Spoke" to "Spoke — interested" later must not
+/// silently rewrite what someone recorded last month.
+model ContactAttempt {
+  id        String  @id @default(uuid()) @db.Uuid
+  contactId String  @map("contact_id") @db.Uuid
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  /// Who made the attempt. Kept even if they leave the team, so history stays attributable.
+  memberId String?     @map("member_id") @db.Uuid
+  member   TeamMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  /// Snapshot of their name, so a deleted member doesn't turn history anonymous.
+  memberName String @map("member_name") @db.VarChar(120)
+
+  channel String  @db.VarChar(40)
+  outcome String  @db.VarChar(60)
+  note    String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([contactId, createdAt])
+  @@index([memberId, createdAt])
+  @@map("contact_attempts")
+}
+
+/// The editable vocabulary for logging an attempt. Two small ordered lists rather than
+/// enums, because the right words depend on how a particular team sells.
+model AttemptChannel {
+  id        String  @id @default(uuid()) @db.Uuid
+  sortOrder Int     @map("sort_order")
+  label     String  @unique @db.VarChar(40)
+  isActive  Boolean @default(true) @map("is_active")
+
+  @@index([sortOrder])
+  @@map("attempt_channels")
+}
+
+model AttemptOutcome {
+  id        String  @id @default(uuid()) @db.Uuid
+  sortOrder Int     @map("sort_order")
+  label     String  @unique @db.VarChar(60)
+  isActive  Boolean @default(true) @map("is_active")
+
+  @@index([sortOrder])
+  @@map("attempt_outcomes")
+}
+
+enum AutoAssignMode {
+  /// New website leads arrive with no owner and wait for an admin.
+  UNASSIGNED
+  /// Rotate through active sales members in name order.
+  ROUND_ROBIN
+  /// Always the same person.
+  FIXED
+
+  @@map("auto_assign_mode")
+}
+
+/// How lead management behaves. Singleton, like ContactSection and FooterContent.
+///
+/// These are settings rather than constants because they encode team policy, not layout
+/// facts — the right answer differs between teams and changes as one grows.
+model LeadSettings {
+  id String @id
+
+  autoAssignMode     AutoAssignMode @default(UNASSIGNED) @map("auto_assign_mode")
+  autoAssignMemberId String?        @map("auto_assign_member_id") @db.Uuid
+  /// Round-robin pointer: who got the last one. Persisted because the rotation has to
+  /// survive a restart, and a serverless instance has no memory of the previous request.
+  lastAssignedMemberId String? @map("last_assigned_member_id") @db.Uuid
+
+  salesCanEditContact       Boolean @default(true) @map("sales_can_edit_contact")
+  salesCanClaimUnassigned   Boolean @default(false) @map("sales_can_claim_unassigned")
+  salesCanExport            Boolean @default(false) @map("sales_can_export")
+  salesCanSeeOthersAttempts Boolean @default(false) @map("sales_can_see_others_attempts")
+
+  /// Default action for an imported row whose email already exists: enrich | log | overwrite | skip.
+  importDefaultMatchAction String  @default("enrich") @map("import_default_match_action") @db.VarChar(16)
+  importMaxRows            Int     @default(5000) @map("import_max_rows")
+  importAllowOverwrite     Boolean @default(true) @map("import_allow_overwrite")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("lead_settings")
+}
+
+/// One spreadsheet upload. Keeps the provenance of imported contacts, so "where did this
+/// person come from?" has an answer months later.
+model ImportBatch {
+  id       String @id @default(uuid()) @db.Uuid
+  filename String @db.VarChar(255)
+
+  importedById String?     @map("imported_by_id") @db.Uuid
+  importedBy   TeamMember? @relation(fields: [importedById], references: [id], onDelete: SetNull)
+
+  createdCount  Int @default(0) @map("created_count")
+  enrichedCount Int @default(0) @map("enriched_count")
+  loggedCount   Int @default(0) @map("logged_count")
+  skippedCount  Int @default(0) @map("skipped_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  enquiries Enquiry[]
+
+  @@index([createdAt])
+  @@map("import_batches")
+}
+
 /// An immutable published snapshot. Append-only: publishing writes a new row, it never
 /// updates an old one, so every release stays inspectable and restorable.
 model ContentRelease {

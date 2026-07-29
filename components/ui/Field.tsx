@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { findMarkdownWarnings } from "@/lib/text/plainText";
+import { isSafeLinkUrl } from "@/lib/validation/contentSchemas";
 
 const CONTROL_CLASSES =
   "w-full rounded-sm border border-border bg-field px-3 py-2 text-sm text-fg placeholder:text-muted transition-colors duration-150 hover:border-border-strong focus:border-accent focus:outline-none";
@@ -258,6 +259,86 @@ export function ParagraphsField({
           </>
         )}
       </p>
+    </FieldShell>
+  );
+}
+
+/**
+ * Footer link lists, typed one per line as `Label | https://url`.
+ *
+ * A line-based textarea rather than a repeatable row widget: it pastes well, reorders by
+ * moving a line, and needs no add/remove button choreography. The preview underneath parses
+ * each line back out so the split is never a guess, and flags any URL the server will reject.
+ */
+export function LinkListField({
+  label,
+  name,
+  defaultValue = [],
+  maxCount,
+  hint,
+  error,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: { label: string; url: string }[];
+  maxCount: number;
+  hint?: string;
+  error?: string;
+}) {
+  const [value, setValue] = useState(
+    defaultValue.map((link) => `${link.label} | ${link.url}`).join("\n"),
+  );
+
+  const parsedLinks = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf("|");
+      if (separatorIndex === -1) {
+        return { label: line, url: "" };
+      }
+      return {
+        label: line.slice(0, separatorIndex).trim(),
+        url: line.slice(separatorIndex + 1).trim(),
+      };
+    });
+
+  return (
+    <FieldShell
+      label={label}
+      hint={hint}
+      error={error}
+      counter={{ current: parsedLinks.length, max: maxCount }}
+    >
+      <textarea
+        name={name}
+        rows={5}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={"X | https://x.com/voidix\nGitHub | https://github.com/voidix"}
+        className={`${CONTROL_CLASSES} resize-y font-mono text-xs leading-relaxed`}
+      />
+
+      {parsedLinks.length > 0 && (
+        <ul className="flex flex-col gap-1 pt-1">
+          {parsedLinks.map((link, index) => {
+            const isValid = isSafeLinkUrl(link.url);
+
+            return (
+              <li key={index} className="flex items-baseline gap-2 text-[11px]">
+                <span className="shrink-0 text-fg">{link.label || "(no label)"}</span>
+                <span aria-hidden className="text-muted/40">
+                  →
+                </span>
+                <span className={`truncate ${isValid ? "text-muted" : "text-danger"}`}>
+                  {link.url || "(no URL)"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </FieldShell>
   );
 }

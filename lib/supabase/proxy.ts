@@ -4,7 +4,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { readSupabaseEnvironment } from "@/lib/supabase/server";
 
 const LOGIN_PATH = "/login";
-const PUBLIC_PATHS = new Set<string>([LOGIN_PATH]);
+
+/**
+ * Paths that skip the session check.
+ *
+ * `/api/leads` is the site's contact-form intake and is called by a machine, not a browser —
+ * redirecting it to the login page would turn every submission into a silent 307 that the
+ * caller reads as success. It runs its own authentication (shared secret, origin allowlist,
+ * rate limit, honeypot) in lib/leads/intake.ts. Anything added to this set must do the same:
+ * this is the list of routes with no session behind them.
+ */
+const PUBLIC_PATHS = new Set<string>([LOGIN_PATH, "/api/leads"]);
 
 /**
  * Refreshes the Supabase session on every request and bounces anonymous visitors to the
@@ -55,7 +65,10 @@ export async function updateSessionAndGuard(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isPublicPath) {
+  // Only the login page bounces an already-signed-in visitor onwards. Checking `isPublicPath`
+  // here instead would redirect POSTs to /api/leads whenever the caller happened to carry a
+  // valid session cookie, turning a stored lead into a 307 to the dashboard.
+  if (user && pathname === LOGIN_PATH) {
     const adminUrl = request.nextUrl.clone();
     adminUrl.pathname = "/admin";
     adminUrl.search = "";

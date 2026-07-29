@@ -13,6 +13,8 @@ const SECTION_LABELS: Record<keyof DraftStatus["changedSections"], string> = {
   services: "Services",
   projects: "Works",
   faq: "FAQ",
+  contact: "Contact",
+  footer: "Footer",
 };
 
 export function PublishPanel({ draftStatus }: { draftStatus: DraftStatus }) {

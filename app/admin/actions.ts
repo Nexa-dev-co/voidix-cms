@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { publishRelease } from "@/lib/content/publish";
 import { formError, formSuccess, type FormState } from "@/lib/forms/formState";
 import { releaseNoteSchema } from "@/lib/validation/contentSchemas";
@@ -11,7 +11,7 @@ export async function publishAction(
   _previousState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const user = await requireUser();
+  const user = await requireAdmin();
 
   const parsedNote = releaseNoteSchema.safeParse(String(formData.get("note") ?? ""));
 

@@ -2,10 +2,10 @@ import Link from "next/link";
 
 import { signOutAction } from "@/app/login/actions";
 import { SidebarNav } from "@/components/layout/SidebarNav";
-import { requireUser } from "@/lib/auth";
+import { requireMember } from "@/lib/auth";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
+  const member = await requireMember();
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
@@ -15,16 +15,21 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <span className="eyebrow">control</span>
         </Link>
 
-        <SidebarNav />
+        {/* Hiding the content links from a salesperson is presentation, not protection — the
+            route group's layout and every action check the role for themselves. */}
+        <SidebarNav role={member.role} />
 
         <div className="mt-auto flex flex-col gap-2 border-t border-border px-3 pt-4">
-          <p className="truncate text-[11px] text-muted" title={user.email ?? undefined}>
-            {user.email}
+          <p className="truncate text-sm text-fg" title={member.email}>
+            {member.name}
+          </p>
+          <p className="truncate text-[11px] text-muted">
+            {member.role === "ADMIN" ? "Admin" : "Sales"}
           </p>
           <form action={signOutAction}>
             <button
               type="submit"
-              className="text-xs text-muted transition-colors duration-150 hover:text-accent"
+              className="mt-1 text-xs text-muted transition-colors duration-150 hover:text-accent"
             >
               Sign out
             </button>

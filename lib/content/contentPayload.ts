@@ -1,3 +1,4 @@
+import { SINGLETON_ROW_ID } from "@/lib/content/singleton";
 import { prisma } from "@/lib/prisma";
 
 // The published payload is shaped to drop straight into the site's existing TypeScript
@@ -31,10 +32,40 @@ export interface PublishedFaqEntry {
   answer: string[];
 }
 
+export interface PublishedContact {
+  eyebrow: string;
+  titleLine1: string;
+  titleLine2: string;
+  description: string;
+  emailAddress: string;
+  formNameLabel: string;
+  formEmailLabel: string;
+  formMessageLabel: string;
+  submitLabel: string;
+  successMessage: string;
+  errorMessage: string;
+}
+
+export interface PublishedLink {
+  label: string;
+  url: string;
+}
+
+export interface PublishedFooter {
+  tagline: string;
+  copyright: string;
+  socialLinks: PublishedLink[];
+  legalLinks: PublishedLink[];
+}
+
 export interface ContentPayload {
   services: PublishedService[];
   projects: PublishedProject[];
   faq: PublishedFaqEntry[];
+  /// Null until someone saves the section for the first time. The site should treat a null
+  /// here as "this section isn't ready" rather than rendering empty strings.
+  contact: PublishedContact | null;
+  footer: PublishedFooter | null;
 }
 
 export function formatOrdinal(position: number): string {
@@ -47,20 +78,25 @@ export function formatOrdinal(position: number): string {
  * out whether anything is actually waiting to go out.
  */
 export async function buildContentPayload(): Promise<ContentPayload> {
-  const [services, projects, faqEntries] = await Promise.all([
-    prisma.service.findMany({
-      orderBy: { sortOrder: "asc" },
-      include: { capabilities: { orderBy: { sortOrder: "asc" } } },
-    }),
-    prisma.project.findMany({
-      orderBy: { sortOrder: "asc" },
-      include: { tags: { orderBy: { sortOrder: "asc" } } },
-    }),
-    prisma.faqEntry.findMany({
-      orderBy: { sortOrder: "asc" },
-      include: { paragraphs: { orderBy: { sortOrder: "asc" } } },
-    }),
-  ]);
+  const [services, projects, faqEntries, contact, footer, socialLinks, legalLinks] =
+    await Promise.all([
+      prisma.service.findMany({
+        orderBy: { sortOrder: "asc" },
+        include: { capabilities: { orderBy: { sortOrder: "asc" } } },
+      }),
+      prisma.project.findMany({
+        orderBy: { sortOrder: "asc" },
+        include: { tags: { orderBy: { sortOrder: "asc" } } },
+      }),
+      prisma.faqEntry.findMany({
+        orderBy: { sortOrder: "asc" },
+        include: { paragraphs: { orderBy: { sortOrder: "asc" } } },
+      }),
+      prisma.contactSection.findUnique({ where: { id: SINGLETON_ROW_ID } }),
+      prisma.footerContent.findUnique({ where: { id: SINGLETON_ROW_ID } }),
+      prisma.footerSocialLink.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.footerLegalLink.findMany({ orderBy: { sortOrder: "asc" } }),
+    ]);
 
   return {
     services: services.map((service, position) => ({
@@ -83,6 +119,29 @@ export async function buildContentPayload(): Promise<ContentPayload> {
       question: entry.question,
       answer: entry.paragraphs.map((paragraph) => paragraph.body),
     })),
+    contact: contact
+      ? {
+          eyebrow: contact.eyebrow,
+          titleLine1: contact.titleLine1,
+          titleLine2: contact.titleLine2,
+          description: contact.description,
+          emailAddress: contact.emailAddress,
+          formNameLabel: contact.formNameLabel,
+          formEmailLabel: contact.formEmailLabel,
+          formMessageLabel: contact.formMessageLabel,
+          submitLabel: contact.submitLabel,
+          successMessage: contact.successMessage,
+          errorMessage: contact.errorMessage,
+        }
+      : null,
+    footer: footer
+      ? {
+          tagline: footer.tagline,
+          copyright: footer.copyright,
+          socialLinks: socialLinks.map((link) => ({ label: link.label, url: link.url })),
+          legalLinks: legalLinks.map((link) => ({ label: link.label, url: link.url })),
+        }
+      : null,
   };
 }
 
@@ -90,6 +149,8 @@ export interface SectionChangeSummary {
   services: boolean;
   projects: boolean;
   faq: boolean;
+  contact: boolean;
+  footer: boolean;
 }
 
 export interface DraftStatus {
@@ -112,7 +173,13 @@ export function compareWithRelease(
   if (!release) {
     return {
       hasUnpublishedChanges: true,
-      changedSections: { services: true, projects: true, faq: true },
+      changedSections: {
+        services: true,
+        projects: true,
+        faq: true,
+        contact: true,
+        footer: true,
+      },
       neverPublished: true,
     };
   }
@@ -121,11 +188,14 @@ export function compareWithRelease(
     services: !isDeepEqual(draft.services, release.services),
     projects: !isDeepEqual(draft.projects, release.projects),
     faq: !isDeepEqual(draft.faq, release.faq),
+    // `?? null` because releases published before these sections existed have no key at all,
+    // and `undefined` vs `null` would otherwise read as a change on every comparison forever.
+    contact: !isDeepEqual(draft.contact, release.contact ?? null),
+    footer: !isDeepEqual(draft.footer, release.footer ?? null),
   };
 
   return {
-    hasUnpublishedChanges:
-      changedSections.services || changedSections.projects || changedSections.faq,
+    hasUnpublishedChanges: Object.values(changedSections).some((hasChanged) => hasChanged),
     changedSections,
     neverPublished: false,
   };
@@ -160,5 +230,8 @@ export function parseReleasePayload(payload: unknown): ContentPayload | null {
     services: candidate.services,
     projects: candidate.projects,
     faq: candidate.faq,
+    // Releases published before Contact and Footer existed simply don't carry these keys.
+    contact: candidate.contact ?? null,
+    footer: candidate.footer ?? null,
   };
 }
