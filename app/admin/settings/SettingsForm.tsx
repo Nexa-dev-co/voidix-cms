@@ -136,6 +136,18 @@ export function SettingsForm({
           hint="Off means each salesperson sees only their own call history on a lead."
           defaultChecked={settings.salesCanSeeOthersAttempts}
         />
+        <Toggle
+          name="salesCanCloseLeads"
+          label="Mark leads won or lost"
+          hint="Off means Sales move leads through the open stages and an admin closes them — the numbers the business reports on aren't self-declared."
+          defaultChecked={settings.salesCanCloseLeads}
+        />
+        <Toggle
+          name="salesCanEditCustomFields"
+          label="Edit the extra fields"
+          hint="The admin-defined fields on a contact. Off means Sales can read them but not change them."
+          defaultChecked={settings.salesCanEditCustomFields}
+        />
       </fieldset>
 
       <fieldset className="flex flex-col gap-4 border-t border-border pt-8">

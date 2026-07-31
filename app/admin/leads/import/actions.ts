@@ -4,7 +4,16 @@ import { revalidatePath } from "next/cache";
 
 import { EnquirySource } from "@/generated/prisma/enums";
 import { requireMember, type CurrentMember } from "@/lib/auth";
+import { getActiveFieldDefinitions } from "@/lib/leads/customFields";
+import {
+  guessCustomFieldColumns,
+  parseFieldValue,
+  splitImportedCell,
+  type CustomFieldDefinitionSummary,
+} from "@/lib/leads/customFieldTypes";
+import { originColumns } from "@/lib/leads/leadOrigin";
 import { getLeadSettings } from "@/lib/leads/leadSettings";
+import { getDefaultStage } from "@/lib/leads/pipeline";
 import {
   buildImportPlan,
   DEFAULT_MATCH_ACTION,
@@ -42,6 +51,7 @@ export async function previewImportAction(
   await requireMember();
 
   const settings = await getLeadSettings();
+  const customFields = await getActiveFieldDefinitions();
   const file = formData.get("file");
   const isRemap = formData.get("intent") === "remap";
 
@@ -74,6 +84,9 @@ export async function previewImportAction(
   }
 
   const mapping = isRemap ? readMappingFromForm(formData, headers) : guessColumnMapping(headers);
+  const customMapping = isRemap
+    ? readCustomMappingFromForm(formData, headers, customFields)
+    : guessCustomFieldColumns(headers, customFields);
 
   if (mapping.email === null) {
     return {
@@ -88,6 +101,8 @@ export async function previewImportAction(
       samples: collectColumnSamples(rows, headers.length),
       defaultMatchAction: settings.importDefaultMatchAction,
       allowOverwrite: settings.importAllowOverwrite,
+      customFields,
+      customMapping,
     };
   }
 
@@ -104,7 +119,81 @@ export async function previewImportAction(
     samples: collectColumnSamples(rows, headers.length),
     defaultMatchAction: settings.importDefaultMatchAction,
     allowOverwrite: settings.importAllowOverwrite,
+    customFields,
+    customMapping,
   };
+}
+
+function readCustomMappingFromForm(
+  formData: FormData,
+  headers: string[],
+  definitions: CustomFieldDefinitionSummary[],
+): Record<string, number | null> {
+  const mapping: Record<string, number | null> = {};
+
+  for (const definition of definitions) {
+    const raw = String(formData.get(`column_custom_${definition.id}`) ?? "");
+    const index = Number(raw);
+
+    mapping[definition.id] =
+      raw !== "" && Number.isInteger(index) && index >= 0 && index < headers.length ? index : null;
+  }
+
+  return mapping;
+}
+
+/**
+ * Writes the mapped custom fields for one imported row.
+ *
+ * A cell that fails validation — "twenty five k" in a Number field — is skipped rather than
+ * failing the whole import: one bad cell in a 5,000-row file should not cost the other 4,999.
+ * The row still imports; the field is simply left unset for that person.
+ *
+ * `overwriteExisting` follows the row's match action: "enrich" fills only what is blank, so a
+ * value already recorded by hand survives a re-import of the same list.
+ */
+async function writeImportedCustomFields(
+  contactId: string,
+  definitions: CustomFieldDefinitionSummary[],
+  customMapping: Record<string, number | null>,
+  row: string[],
+  overwriteExisting: boolean,
+): Promise<void> {
+  for (const definition of definitions) {
+    const columnIndex = customMapping[definition.id];
+
+    if (columnIndex === null || columnIndex === undefined) {
+      continue;
+    }
+
+    const raw = (row[columnIndex] ?? "").trim();
+
+    if (raw.length === 0) {
+      continue;
+    }
+
+    const parsed = parseFieldValue(definition, splitImportedCell(definition, raw));
+
+    if (!parsed.ok || parsed.isEmpty) {
+      continue;
+    }
+
+    if (!overwriteExisting) {
+      const existing = await prisma.contactFieldValue.findUnique({
+        where: { contactId_definitionId: { contactId, definitionId: definition.id } },
+      });
+
+      if (existing) {
+        continue;
+      }
+    }
+
+    await prisma.contactFieldValue.upsert({
+      where: { contactId_definitionId: { contactId, definitionId: definition.id } },
+      create: { contactId, definitionId: definition.id, ...parsed.data },
+      update: parsed.data,
+    });
+  }
 }
 
 function readMappingFromForm(
@@ -145,13 +234,16 @@ export async function commitImportAction(
   const filename = String(formData.get("filename") ?? "import");
   const rowsJson = String(formData.get("rows") ?? "");
   const mappingJson = String(formData.get("mapping") ?? "");
+  const customMappingJson = String(formData.get("customMapping") ?? "{}");
 
   let rows: string[][];
   let mapping: Record<ImportFieldKey, number | null>;
+  let customMapping: Record<string, number | null>;
 
   try {
     rows = JSON.parse(rowsJson);
     mapping = JSON.parse(mappingJson);
+    customMapping = JSON.parse(customMappingJson);
   } catch {
     return { ...IDLE_IMPORT_RESULT, status: "error", message: "That import expired — upload the file again." };
   }
@@ -161,6 +253,9 @@ export async function commitImportAction(
   }
 
   const settings = await getLeadSettings();
+  // Re-read rather than trusting what came back from the browser — a field could have been
+  // retired between the preview and the confirm, and a retired field takes no new values.
+  const customFields = await getActiveFieldDefinitions();
   const plan = await buildImportPlan(rows, mapping);
   const matchActions = readMatchActions(formData, plan.rows, settings);
   const assignment = await resolveAssignment(formData, member);
@@ -168,6 +263,17 @@ export async function commitImportAction(
   const batch = await prisma.importBatch.create({
     data: { filename, importedById: member.id },
   });
+
+  // Resolved once for the whole file — every contact this import creates shares the same origin.
+  const origin = originColumns({
+    via: "IMPORT",
+    member: { id: member.id, name: member.name },
+    batchId: batch.id,
+  });
+
+  // Imported prospects have not been spoken to, so they land where a new lead lands. Resolved
+  // once rather than per row — a 5,000-row file would otherwise ask the same question 5,000 times.
+  const defaultStage = await getDefaultStage();
 
   let created = 0;
   let enriched = 0;
@@ -180,17 +286,26 @@ export async function commitImportAction(
       continue;
     }
 
+    // `rowNumber` is 1-based against the data rows, header excluded — the same index the plan
+    // was built from, so this is the cell data behind this planned row.
+    const sourceRow = rows[row.rowNumber - 1] ?? [];
+
     if (row.outcome === "create") {
       const assignedToId = assignment.next();
 
-      await prisma.contact.create({
+      const contact = await prisma.contact.create({
         data: {
           name: row.name,
           email: row.email,
           company: row.company,
           phone: row.phone,
+          stageId: defaultStage.id,
           assignedToId,
           assignedAt: assignedToId ? new Date() : null,
+          // Set on created contacts only. A row that matched somebody already here logs an
+          // enquiry against them below and leaves their origin alone — they were not added by
+          // this file, they were merely mentioned in it.
+          ...origin,
           enquiries: {
             create: [
               { source: EnquirySource.IMPORT, message: row.message, importBatchId: batch.id },
@@ -198,6 +313,8 @@ export async function commitImportAction(
           },
         },
       });
+
+      await writeImportedCustomFields(contact.id, customFields, customMapping, sourceRow, true);
       created += 1;
       continue;
     }
@@ -248,6 +365,13 @@ export async function commitImportAction(
           };
 
     await prisma.contact.update({ where: { id: row.existingContactId }, data });
+    await writeImportedCustomFields(
+      row.existingContactId,
+      customFields,
+      customMapping,
+      sourceRow,
+      action === "overwrite",
+    );
     enriched += 1;
   }
 

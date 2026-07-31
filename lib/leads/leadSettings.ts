@@ -10,9 +10,13 @@ export interface LeadSettingsValues {
   salesCanClaimUnassigned: boolean;
   salesCanExport: boolean;
   salesCanSeeOthersAttempts: boolean;
+  salesCanCloseLeads: boolean;
+  salesCanEditCustomFields: boolean;
   importDefaultMatchAction: string;
   importMaxRows: number;
   importAllowOverwrite: boolean;
+  /** Raw `Json` — parsed through `parseColumnLayout`, which is defensive about its shape. */
+  leadsTableColumns: unknown;
 }
 
 /**
@@ -30,9 +34,12 @@ export const DEFAULT_LEAD_SETTINGS: LeadSettingsValues = {
   salesCanClaimUnassigned: false,
   salesCanExport: false,
   salesCanSeeOthersAttempts: false,
+  salesCanCloseLeads: false,
+  salesCanEditCustomFields: false,
   importDefaultMatchAction: "enrich",
   importMaxRows: 5000,
   importAllowOverwrite: true,
+  leadsTableColumns: [],
 };
 
 /**
@@ -56,9 +63,12 @@ export async function getLeadSettings(): Promise<LeadSettingsValues> {
     salesCanClaimUnassigned: settings.salesCanClaimUnassigned,
     salesCanExport: settings.salesCanExport,
     salesCanSeeOthersAttempts: settings.salesCanSeeOthersAttempts,
+    salesCanCloseLeads: settings.salesCanCloseLeads,
+    salesCanEditCustomFields: settings.salesCanEditCustomFields,
     importDefaultMatchAction: settings.importDefaultMatchAction,
     importMaxRows: settings.importMaxRows,
     importAllowOverwrite: settings.importAllowOverwrite,
+    leadsTableColumns: settings.leadsTableColumns,
   };
 }
 

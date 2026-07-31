@@ -1,4 +1,5 @@
 import { ImportWizard } from "@/app/admin/leads/import/ImportWizard";
+import ReadingColumn from "@/components/layout/ReadingColumn";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { requireMember } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +19,7 @@ export default async function ImportLeadsPage() {
     : [];
 
   return (
-    <>
+    <ReadingColumn>
       <PageHeader
         eyebrow="Leads"
         title="Import a spreadsheet"
@@ -30,6 +31,6 @@ export default async function ImportLeadsPage() {
       />
 
       <ImportWizard members={members} canAssign={canAssign} />
-    </>
+    </ReadingColumn>
   );
 }

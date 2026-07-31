@@ -13,9 +13,14 @@ The site does **not** read from this database yet. Publishing works today: it sn
 copy into a release and records that the site was not rebuilt. Wiring the site up is a
 separate task — see [Connecting the site](#connecting-the-site).
 
+> **[docs/PROJECT.md](docs/PROJECT.md)** is the full record — every decision and the reasoning
+> behind it, the data model, the security posture, the defects found along the way, and what
+> is deliberately missing. Read that before changing anything structural.
+
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Tailwind v4 · Prisma 7 · Supabase (Postgres + Auth)
+· shadcn/ui + TanStack Table (leads table) · ExcelJS (imports) · Zod 4
 
 ## Setup
 
@@ -105,6 +110,10 @@ that forgot the filter is exactly how one salesperson ends up reading another's 
 The detail page re-checks per contact, because a URL is guessable and a direct visit never
 touches the list.
 
+Sales work their leads through the open stages freely. Marking one **won or lost**, and editing
+the extra fields, each sit behind their own setting that defaults to off — as every widening
+permission here does.
+
 Add people under **Team**. That one form creates their Supabase Auth login *and* their
 permissions, and hands back a one-time password to pass on — no visit to the Supabase
 dashboard required. You can also issue a fresh password, deactivate, or remove someone
@@ -143,13 +152,44 @@ skipped, no data is lost, and **two salespeople can't end up owning two rows for
 Leads arrive three ways — the website form, `Add lead`, and a spreadsheet import — and all
 three follow the same rule: a known email never creates a second record.
 
+### The table
+
+A sortable, filterable table whose columns an admin composes in Settings — the built-in ones
+and any extra fields they've defined. Sorting, filtering, searching and paging all happen in
+the database and live in the URL, so a filtered view is a link you can send someone and it
+survives a refresh. Tick rows to move stage, assign or archive several at once.
+
+### Stages and follow-ups
+
+Every lead sits on an editable pipeline — **New → Contacted → Qualified → Proposal →
+Won / Lost** out of the box. Each stage is marked open, won or lost, which is what lets the
+panel say how much is still live and stop chasing someone who already said no.
+
+Working a lead goes through a four-step **follow-up wizard**: what you did → how it went →
+where it stands → what's next. It writes the attempt, the stage move and the next follow-up
+date in one go, so a call can't be logged without anyone deciding what happens next. There's a
+one-click path for the common dead end, which logs "no answer" and pushes the date a few days
+without walking the steps.
+
+Overdue follow-ups get their own tab and turn red in the table. Archiving takes a lead out of
+the working list without deleting anything.
+
+### Extra fields
+
+Admins can define what else this team records about a person — text, long text, number, date,
+checkbox, link, dropdown, multi-select. Each becomes a column on the table, a box on the
+contact page, and a mappable column in the importer, from one definition. Retiring a field
+hides it everywhere and keeps every value, so bringing it back brings the data with it.
+
 ### Attempts
 
 Reaching *out* is recorded separately from them reaching *in*. An attempt logs who tried,
 when, through which channel, how it went, and an optional note — so "has anyone chased this?"
 has an answer. **A salesperson sees only their own attempts** on a lead unless an admin turns
 that off in Settings. Channels and outcomes are editable vocabulary; attempts store the chosen
-label as text, so renaming an outcome never rewrites what someone recorded last month.
+label as text, so renaming an outcome never rewrites what someone recorded last month. Stage
+moves are snapshotted the same way, and the contact page merges attempts, stage changes and
+enquiries into one timeline rather than three lists.
 
 ### Importing a spreadsheet
 

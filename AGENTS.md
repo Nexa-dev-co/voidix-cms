@@ -12,6 +12,10 @@ inbox. See `README.md` for what it deliberately cannot do and why.
 
 Contact and Footer do not exist in the site yet; their copy is stored here ahead of the build.
 
+**`docs/PROJECT.md` records why the system is shaped the way it is** — the decisions, the
+defects already hit and their causes, and the invariants worth protecting. Read it before any
+structural change; it will save you re-deriving reasoning that is already written down.
+
 ## Versions that differ from training data
 
 Check before writing, don't assume:
@@ -28,6 +32,20 @@ Check before writing, don't assume:
 - **Tailwind v4** — CSS-first config. Tokens live in `@theme inline` in `app/globals.css`;
   there is no `tailwind.config.ts`.
 - **Zod 4**.
+- **shadcn/ui is vendored, not stock.** Only `Table`, `Checkbox` and `Dialog` are here, in
+  PascalCase with named exports — a multi-export primitive set can't follow the
+  "components default-export" rule, so it's the documented exception. `shadcn add` writes
+  kebab-case; rename after adding.
+
+  Two of its semantic names mean the opposite of what they mean here: `--accent` is voidix's
+  cyan but shadcn's neutral *hover surface*, and `--muted` is faded *text* here but a *surface*
+  there. Aliasing cannot satisfy both readings of one token, so those usages were rewritten to
+  `bg-card` inside the primitives. **Re-running `shadcn add` overwrites the file and brings
+  `bg-accent` / `bg-muted` / `text-accent-foreground` back with it** — sweep them again, or
+  dropdown rows will hover solid cyan. Everything else is aliased in `@theme inline`; see the
+  comment there. Note also that `Dialog` imports `@/components/ui/button` lowercase, which
+  resolves to the project's own `Button` on a case-insensitive filesystem and then fails on its
+  `variant="outline"`.
 
 ## Architecture
 
@@ -47,10 +65,57 @@ closed** when unconfigured. Anything added to `PUBLIC_PATHS` takes on the same o
 **Leads are not content.** They never enter a release, never get published, and are deleted
 for real rather than flagged. Raw IPs are never stored, only a salted hash.
 
+**The leads table pages in the database.** `lib/leads/leadQuery.ts` is the only place a page of
+leads is fetched; TanStack runs in manual mode and is the rendering model, not the data engine.
+Loading every lead into the browser would put the whole pipeline's names, emails and phone
+numbers in the page payload and fall over well before the 5,000-row import cap. Sorting by a
+custom field queries **from** `contact_field_values` with the contact filter nested inside, so
+`visibility.ts` is still the one gate — a raw SQL `ORDER BY` would have stepped around it.
+
+**The leads table's column layout has exactly one home:** `lead_settings.leads_table_columns`.
+Field definitions deliberately carry no "show in table" flag — two places to control one
+decision means two ways to disagree, with nothing to arbitrate between them.
+
+**The leads table scrolls sideways; the page scrolls down.** These are exclusive, and the reason
+will come up again: `position: sticky` resolves against the nearest scrolling ancestor. Give the
+table its own scrollbox and the column headings stick to the box instead of the window; hand that
+overflow to the page and reaching the last column drags the heading, tabs and search box off to
+the left with it. The scrollbox won, which is also what makes the pinned Name column possible.
+The table is never `flex-1` (that stretches five rows into a half-empty box) and never scrolls
+vertically. Below 640px the rows render as cards instead. Pages declare their own width —
+prose and forms wrap in `ReadingColumn`, tables and reports use the whole shell.
+
+**Chart colour is computed, not chosen.** `--chart-1..6` in `app/globals.css` is an *ordinal*
+ramp — one hue, monotone lightness, validated against the `--card` surface. It encodes position
+in the pipeline. Nominal categories (lead sources) take **one** step for every bar: colouring
+them differently spends the identity channel re-encoding what bar length already shows. Won and
+Lost wear `--success`/`--danger` and never join the ramp, because a status colour must not double
+as a series. If you change those steps, re-run the check rather than eyeballing it.
+
+**Stages replaced the old NEW/READ/ARCHIVED status.** `pipeline_stages` is editable vocabulary,
+but each row carries a `kind` of OPEN/WON/LOST so the system knows which stages end the
+conversation — that is what makes "open pipeline" countable and stops a closed lead being
+chased as overdue. Archiving is a separate boolean, not a stage.
+
+**A custom field is retired, never deleted.** Values survive in `contact_field_values`, so
+restoring the definition restores the data, and no admin can wipe hundreds of records with one
+mis-click. The `kind` is fixed after creation: stored values live in a column chosen by it, so
+changing it would strand them.
+
 **Lead visibility goes through `lib/leads/visibility.ts`.** Never write a contact query that
 filters by owner inline — sales must see only their own leads, and a query that forgets is a
 silent cross-account leak. Server Actions re-check per contact via `loadPermittedContact`,
-because an action accepts whatever id it is POSTed.
+because an action accepts whatever id it is POSTed. **`lib/leads/reports.ts` is bound by the same
+rule** — an aggregate is the easiest place to leak a pipeline, because the number looks
+unremarkable and no name you shouldn't have seen ever appears on screen. Its owner filter can
+only ever narrow: for Sales it is ignored outright.
+
+**How a lead got here lives on the contact, not on its enquiries.** `contacts.origin_*` is written
+once at creation and never rewritten; `Enquiry.source` answers the same question *per approach*,
+which is a different one — a lead imported in March who fills in the form in June was still added
+by the import. `origin_source` has **no database default on purpose**, so a new intake route fails
+to compile rather than guessing. Build the columns with `originColumns()` in
+`lib/leads/leadOrigin.ts`; all three intake routes go through it.
 
 **Reaching out (`ContactAttempt`) is not reaching in (`Enquiry`).** Keep them separate, and
 store the channel/outcome as a text snapshot rather than a foreign key so renaming the

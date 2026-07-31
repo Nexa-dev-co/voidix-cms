@@ -1,3 +1,4 @@
+import type { CustomFieldDefinitionSummary } from "@/lib/leads/customFieldTypes";
 import type { ImportPlan } from "@/lib/leads/importPlan";
 import type { ImportFieldKey } from "@/lib/leads/spreadsheet";
 
@@ -20,6 +21,10 @@ export interface ImportPreviewState {
   /** Settings-driven UI hints, so the preview reflects the admin's configured policy. */
   defaultMatchAction: string;
   allowOverwrite: boolean;
+  /** The admin-defined fields a file can also be mapped onto. Empty when none exist. */
+  customFields: CustomFieldDefinitionSummary[];
+  /** Definition id → column index. Separate from `mapping`, which has fixed keys. */
+  customMapping: Record<string, number | null>;
 }
 
 export const IDLE_IMPORT_STATE: ImportPreviewState = {
@@ -33,6 +38,8 @@ export const IDLE_IMPORT_STATE: ImportPreviewState = {
   samples: [],
   defaultMatchAction: "enrich",
   allowOverwrite: true,
+  customFields: [],
+  customMapping: {},
 };
 
 export interface ImportResultState {

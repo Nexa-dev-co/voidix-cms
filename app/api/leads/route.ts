@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 import { EnquirySource } from "@/generated/prisma/enums";
 import { checkIntakeAllowed, HONEYPOT_FIELD } from "@/lib/leads/intake";
+import { originColumns } from "@/lib/leads/leadOrigin";
 import { pickAutoAssignee } from "@/lib/leads/leadSettings";
+import { getDefaultStage } from "@/lib/leads/pipeline";
 import { prisma } from "@/lib/prisma";
 import { normaliseEmail } from "@/lib/validation/contactSchemas";
 import { leadIntakeSchema } from "@/lib/validation/contentSchemas";
@@ -65,7 +67,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, company, message } = parsed.data;
+  // `source` is the site's own label for where the submission came from — a page name, a
+  // campaign. The schema has always accepted it; until now the route parsed it and dropped it on
+  // the floor, so every website lead looked identical to every other one.
+  const { name, company, message, source } = parsed.data;
   const email = normaliseEmail(parsed.data.email);
   const userAgent = request.headers.get("user-agent")?.slice(0, USER_AGENT_MAX_LENGTH) ?? null;
 
@@ -101,13 +106,23 @@ export async function POST(request: Request) {
   // endpoint should hardcode. Returns null when nothing applies, leaving the lead unassigned.
   const assignedToId = await pickAutoAssignee();
 
+  // Somebody who just filled in the form has by definition not been worked yet, so they land in
+  // the first stage. This endpoint stays deliberately narrow — name, email, message — and never
+  // accepts custom fields: those are internal sales notes, and the one route on the public
+  // internet should not be a way to write into them.
+  const defaultStage = await getDefaultStage();
+
   const contact = await prisma.contact.create({
     data: {
       name,
       email,
       company: company && company.length > 0 ? company : null,
+      stageId: defaultStage.id,
       assignedToId,
       assignedAt: assignedToId ? new Date() : null,
+      // Nobody added this lead, so there is no member to record — only the channel and whatever
+      // the site chose to tag the submission with.
+      ...originColumns({ via: "CONTACT_FORM", label: source ?? null }),
       enquiries: {
         create: [
           {

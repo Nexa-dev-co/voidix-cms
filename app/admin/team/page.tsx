@@ -1,5 +1,6 @@
 import { MemberRow } from "@/app/admin/team/MemberRow";
 import { NewMemberForm } from "@/app/admin/team/NewMemberForm";
+import ReadingColumn from "@/components/layout/ReadingColumn";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageHeaderNote } from "@/components/ui/PageHeaderNote";
 import { requireAdmin } from "@/lib/auth";
@@ -17,7 +18,7 @@ export default async function TeamPage() {
   });
 
   return (
-    <>
+    <ReadingColumn>
       <PageHeader
         eyebrow="Access"
         title="Team"
@@ -51,6 +52,6 @@ export default async function TeamPage() {
       </div>
 
       <NewMemberForm />
-    </>
+    </ReadingColumn>
   );
 }

@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 import { PublishPanel } from "@/app/admin/PublishPanel";
-import { LeadStatus } from "@/generated/prisma/enums";
+import { StageKind } from "@/generated/prisma/enums";
+import ReadingColumn from "@/components/layout/ReadingColumn";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { requireMember } from "@/lib/auth";
 import { buildContentPayload, compareWithRelease } from "@/lib/content/contentPayload";
@@ -28,13 +29,26 @@ export default async function AdminDashboardPage() {
   const member = await requireMember();
   const isAdmin = member.role === "ADMIN";
 
-  const [newLeadCount, myLeadCount] = await Promise.all([
-    prisma.contact.count({ where: { status: LeadStatus.NEW } }),
-    prisma.contact.count({ where: { assignedToId: member.id, status: LeadStatus.NEW } }),
+  // "Open" and "overdue" replaced the old unread count. An inbox asks what you haven't looked at;
+  // a pipeline asks what is still live and what you have let slip.
+  const openStageFilter = { isArchived: false, stage: { kind: StageKind.OPEN } };
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [myOpenCount, myOverdueCount, teamOpenCount] = await Promise.all([
+    prisma.contact.count({ where: { ...openStageFilter, assignedToId: member.id } }),
+    prisma.contact.count({
+      where: {
+        ...openStageFilter,
+        assignedToId: member.id,
+        nextFollowUpAt: { lt: startOfToday },
+      },
+    }),
+    prisma.contact.count({ where: openStageFilter }),
   ]);
 
   return (
-    <>
+    <ReadingColumn>
       <PageHeader
         eyebrow={`Signed in as ${member.role === "ADMIN" ? "admin" : "sales"}`}
         title={`Hello, ${member.name.split(" ")[0]}`}
@@ -50,27 +64,43 @@ export default async function AdminDashboardPage() {
           <h2 className="eyebrow mb-3">Leads</h2>
           <div className="flex flex-col divide-y divide-border border-y border-border">
             <Link
-              href="/admin/leads?status=new&owner=mine"
+              href="/admin/leads?due=overdue&owner=mine"
               className="group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50"
             >
               <div>
                 <p className="text-sm text-fg transition-colors group-hover:text-accent">
-                  {myLeadCount === 0 ? "Nothing new assigned to you" : `${myLeadCount} new, yours`}
+                  {myOverdueCount === 0
+                    ? "Nothing overdue"
+                    : `${myOverdueCount} overdue follow-up${myOverdueCount === 1 ? "" : "s"}`}
                 </p>
-                <p className="mt-0.5 text-xs text-muted">Assigned to you and not yet worked.</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Yours, with a follow-up date that has passed.
+                </p>
               </div>
-              {myLeadCount > 0 && (
-                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent" />
+              {myOverdueCount > 0 && (
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-danger" />
               )}
             </Link>
 
             <Link
-              href="/admin/leads?status=new&owner=everyone"
+              href="/admin/leads?stage=open&owner=mine"
               className="group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50"
             >
               <div>
                 <p className="text-sm text-fg transition-colors group-hover:text-accent">
-                  {newLeadCount === 0 ? "No new leads at all" : `${newLeadCount} new in total`}
+                  {myOpenCount === 0 ? "No open leads assigned to you" : `${myOpenCount} open, yours`}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">Still live — not won, lost or archived.</p>
+              </div>
+            </Link>
+
+            <Link
+              href="/admin/leads?stage=open&owner=everyone"
+              className="group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50"
+            >
+              <div>
+                <p className="text-sm text-fg transition-colors group-hover:text-accent">
+                  {teamOpenCount === 0 ? "No open leads at all" : `${teamOpenCount} open in total`}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
                   Across the whole team, including unassigned.
@@ -82,7 +112,7 @@ export default async function AdminDashboardPage() {
 
         {isAdmin && <AdminSections />}
       </div>
-    </>
+    </ReadingColumn>
   );
 }
 

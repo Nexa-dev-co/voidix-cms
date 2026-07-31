@@ -104,40 +104,44 @@ export function ImportWizard({
           <div className="grid gap-4 sm:grid-cols-2">
             {IMPORT_FIELDS.map((field) => {
               const mappedIndex = preview.mapping?.[field.key as ImportFieldKey] ?? null;
-              const sampleValues = mappedIndex === null ? [] : (preview.samples[mappedIndex] ?? []);
 
               return (
-                <div key={field.key} className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className={field.required ? "text-fg" : "text-muted"}>
-                      {field.label}
-                      {field.required && <span className="text-accent"> *</span>}
-                    </span>
-                    <select
-                      name={`column_${field.key}`}
-                      defaultValue={mappedIndex ?? ""}
-                      className={CONTROL_CLASSES}
-                    >
-                      <option value="">— none —</option>
-                      {preview.headers.map((header, index) => (
-                        <option key={`${header}-${index}`} value={index}>
-                          {header || `Column ${index + 1}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Headers lie; values don't. Showing what's actually in the column is the
-                      quickest way to catch a wrong mapping before it's committed. */}
-                  {sampleValues.length > 0 && (
-                    <p className="truncate text-right text-[11px] text-muted/60">
-                      {sampleValues.join(" · ")}
-                    </p>
-                  )}
-                </div>
+                <ColumnMapping
+                  key={field.key}
+                  label={field.label}
+                  inputName={`column_${field.key}`}
+                  isRequired={field.required}
+                  mappedIndex={mappedIndex}
+                  headers={preview.headers}
+                  samples={preview.samples}
+                />
               );
             })}
           </div>
+
+          {preview.customFields.length > 0 && (
+            <>
+              <h3 className="eyebrow mt-2">Extra fields</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {preview.customFields.map((definition) => (
+                  <ColumnMapping
+                    key={definition.id}
+                    label={definition.label}
+                    inputName={`column_custom_${definition.id}`}
+                    isRequired={false}
+                    mappedIndex={preview.customMapping[definition.id] ?? null}
+                    headers={preview.headers}
+                    samples={preview.samples}
+                    hint={
+                      definition.kind === "MULTI_SELECT"
+                        ? "One cell, comma separated — “Web, 3D”."
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
           <div>
             <SubmitButton pendingLabel="Re-checking…" variant="secondary">
@@ -153,6 +157,11 @@ export function ImportWizard({
           <input type="hidden" name="filename" value={preview.filename ?? "import"} />
           <input type="hidden" name="rows" value={JSON.stringify(preview.rows)} />
           <input type="hidden" name="mapping" value={JSON.stringify(preview.mapping)} />
+          <input
+            type="hidden"
+            name="customMapping"
+            value={JSON.stringify(preview.customMapping)}
+          />
 
           <h2 className="eyebrow">Preview</h2>
 
@@ -225,6 +234,62 @@ export function ImportWizard({
           {result.status === "error" && <p className="text-xs text-danger">{result.message}</p>}
         </form>
       )}
+    </div>
+  );
+}
+
+/**
+ * One "which column is this?" row.
+ *
+ * Shared by the builtin fields and the admin-defined ones so the two read identically — an
+ * operator mapping a spreadsheet shouldn't have to notice which of their columns the CMS shipped
+ * with and which somebody added last week.
+ */
+function ColumnMapping({
+  label,
+  inputName,
+  isRequired,
+  mappedIndex,
+  headers,
+  samples,
+  hint,
+}: {
+  label: string;
+  inputName: string;
+  isRequired: boolean;
+  mappedIndex: number | null;
+  headers: string[];
+  samples: string[][];
+  hint?: string;
+}) {
+  const sampleValues = mappedIndex === null ? [] : (samples[mappedIndex] ?? []);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className={isRequired ? "text-fg" : "text-muted"}>
+          {label}
+          {isRequired && <span className="text-accent"> *</span>}
+        </span>
+        <select name={inputName} defaultValue={mappedIndex ?? ""} className={CONTROL_CLASSES}>
+          <option value="">— none —</option>
+          {headers.map((header, index) => (
+            <option key={`${header}-${index}`} value={index}>
+              {header || `Column ${index + 1}`}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Headers lie; values don't. Showing what's actually in the column is the quickest way to
+          catch a wrong mapping before it's committed. */}
+      {sampleValues.length > 0 && (
+        <p className="truncate text-right text-[11px] text-muted/60">
+          {sampleValues.join(" · ")}
+        </p>
+      )}
+
+      {hint && <p className="text-right text-[11px] text-muted/60">{hint}</p>}
     </div>
   );
 }

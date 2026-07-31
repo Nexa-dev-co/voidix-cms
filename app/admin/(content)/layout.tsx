@@ -1,3 +1,4 @@
+import ReadingColumn from "@/components/layout/ReadingColumn";
 import { requireAdmin } from "@/lib/auth";
 
 /**
@@ -9,9 +10,11 @@ import { requireAdmin } from "@/lib/auth";
  *
  * This protects the *pages*. It does not protect the Server Actions those pages call, which
  * are separate POST endpoints — each one calls `requireAdmin()` for itself.
+ *
+ * Every section here is prose being edited, so the whole group takes the reading width.
  */
 export default async function ContentLayout({ children }: { children: React.ReactNode }) {
   await requireAdmin();
 
-  return <>{children}</>;
+  return <ReadingColumn>{children}</ReadingColumn>;
 }

@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Supplies the animate-in / fade-in-0 / zoom-in-95 utilities the vendored Radix primitives
+   (Dialog, DropdownMenu, Select, Popover) use for their open and close transitions. */
+@import "tw-animate-css";
 
 /*
  * The panel borrows the site's design tokens verbatim (app/globals.css in orbix-dev) so an
@@ -16,9 +19,42 @@
   /* Panel-only additions — the site has no forms, so it never needed these. */
   --border-strong: rgba(235, 232, 224, 0.16);
   --field: #0a0a0a;
+  /*
+   * One step above the page, for a row under the cursor.
+   *
+   * A real value rather than `--card` at reduced opacity, for two reasons: it keeps hover and
+   * selected distinguishable as three opaque steps, and the leads table pins its first columns
+   * over the ones scrolled behind them — a translucent hover let the hidden row's text show
+   * faintly through the pinned cell.
+   */
+  --surface-hover: #0a0a0a;
   --danger: #ff6b5e;
   --warning: #ffb24d;
   --success: #3ddc97;
+
+  /*
+   * The reports' chart ramp: one hue, six steps, dim → bright.
+   *
+   * An *ordinal* scale, not a set of series colours. It encodes position in the pipeline —
+   * stage 1 is the dimmest, the last open stage the brightest — so the order is the meaning and
+   * the steps must never be reshuffled or used as "pick a colour per category". Anything nominal
+   * (lead sources, a single trend line) takes one step, `--chart-3`, for every mark: colouring
+   * nominal bars by their value spends the identity channel re-encoding what bar length already
+   * shows.
+   *
+   * Computed against the `--card` surface these render on, not chosen by eye: monotone
+   * lightness, every adjacent gap ≥ 0.06 OKLCH L, single hue (7° spread), and the dimmest step
+   * still at 3.5:1 against the card. Won and Lost are deliberately absent — they mean good and
+   * bad, so they wear `--success` and `--danger`, and a status colour never doubles as a series.
+   *
+   * If you change these, re-run the check rather than eyeballing the result.
+   */
+  --chart-1: #bdf5ff;
+  --chart-2: #63e2f9;
+  --chart-3: #1fcfe9;
+  --chart-4: #00b0cf;
+  --chart-5: #0091ab;
+  --chart-6: #007387;
 }
 
 @theme inline {
@@ -30,12 +66,52 @@
   --color-border-strong: var(--border-strong);
   --color-card: var(--card);
   --color-field: var(--field);
+  --color-surface-hover: var(--surface-hover);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-success: var(--success);
 
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
   --font-display: var(--font-syne);
   --font-sans: var(--font-dm-sans);
+
+  /*
+   * Aliases for the vendored shadcn primitives in components/ui, which are written against
+   * shadcn's semantic names. Mapping them here means those files style themselves from the
+   * voidix palette above and no component ever hardcodes a colour.
+   *
+   * Two of the names could NOT be aliased, because the same token means different things in
+   * the two vocabularies:
+   *
+   *   --accent   voidix: the cyan highlight     shadcn: a neutral hover SURFACE
+   *   --muted    voidix: faded body TEXT        shadcn: a neutral surface
+   *
+   * Aliasing either one would break the other reading — `text-muted` would stop being legible
+   * text, and every dropdown row would hover solid cyan. Those usages were rewritten to
+   * `bg-card` inside the primitives instead. If you re-run `shadcn add`, it overwrites the file
+   * and brings `bg-accent` / `bg-muted` / `text-accent-foreground` back with it: sweep them
+   * again, or the panel will tell you loudly.
+   */
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--bg);
+  --color-secondary: var(--card);
+  --color-secondary-foreground: var(--fg);
+  --color-muted-foreground: var(--muted);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--bg);
+  --color-input: var(--border-strong);
+  --color-ring: var(--accent);
 }
 
 body {

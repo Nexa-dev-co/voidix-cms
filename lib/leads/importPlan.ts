@@ -154,7 +154,7 @@ export async function buildImportPlan(
       name: true,
       company: true,
       phone: true,
-      status: true,
+      stage: { select: { label: true } },
       assignedTo: { select: { name: true } },
     },
   });
@@ -175,7 +175,7 @@ export async function buildImportPlan(
         existing.name,
         existing.company,
         existing.assignedTo ? `owned by ${existing.assignedTo.name}` : "unassigned",
-        existing.status.toLowerCase(),
+        existing.stage.label.toLowerCase(),
       ]
         .filter(Boolean)
         .join(" · ");

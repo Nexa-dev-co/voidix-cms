@@ -143,10 +143,10 @@ model FaqParagraph {
 model ContactSection {
   id String @id
 
-  eyebrow     String @db.VarChar(120)
-  titleLine1  String @map("title_line_1") @db.VarChar(60)
-  titleLine2  String @map("title_line_2") @db.VarChar(60)
-  description String
+  eyebrow      String @db.VarChar(120)
+  titleLine1   String @map("title_line_1") @db.VarChar(60)
+  titleLine2   String @map("title_line_2") @db.VarChar(60)
+  description  String
   /// The address shown to visitors. Not where leads are delivered — that's the site's job.
   emailAddress String @map("email_address") @db.VarChar(320)
 
@@ -198,12 +198,36 @@ model FooterLegalLink {
   @@map("footer_legal_links")
 }
 
-enum LeadStatus {
-  NEW
-  READ
-  ARCHIVED
+/// Whether a stage still counts as live pipeline.
+///
+/// The reason stages aren't just an ordered list of words: something has to know that "Won" and
+/// "Lost" end the conversation. Without it, "how many open leads?" becomes a guess based on
+/// position in the list, and a closed lead keeps asking to be followed up.
+enum StageKind {
+  OPEN
+  WON
+  LOST
 
-  @@map("lead_status")
+  @@map("stage_kind")
+}
+
+/// A step in the sales pipeline. Editable vocabulary, like the attempt channels and outcomes —
+/// the right words depend on how a particular team sells.
+///
+/// Retired rather than deleted, and never deleted while contacts point at it (the FK is
+/// `Restrict`). `contact_stage_changes` snapshots the label as text, so renaming a stage leaves
+/// history intact.
+model PipelineStage {
+  id        String    @id @default(uuid()) @db.Uuid
+  sortOrder Int       @map("sort_order")
+  label     String    @unique @db.VarChar(60)
+  kind      StageKind @default(OPEN)
+  isActive  Boolean   @default(true) @map("is_active")
+
+  contacts Contact[]
+
+  @@index([sortOrder])
+  @@map("pipeline_stages")
 }
 
 enum TeamRole {
@@ -225,22 +249,26 @@ enum TeamRole {
 /// Linked by `email` on first sign-in, which is why the email here must match the one the
 /// account was created with.
 model TeamMember {
-  id String @id @default(uuid()) @db.Uuid
+  id         String   @id @default(uuid()) @db.Uuid
   /// Supabase `auth.users.id`, filled in the first time this person signs in.
-  authUserId String? @unique @map("auth_user_id") @db.Uuid
-  email      String  @unique @db.VarChar(320)
-  name       String  @db.VarChar(120)
+  authUserId String?  @unique @map("auth_user_id") @db.Uuid
+  email      String   @unique @db.VarChar(320)
+  name       String   @db.VarChar(120)
   role       TeamRole @default(SALES)
   /// Revokes access without deleting the row, so their name still renders on contacts they
   /// used to own. Deleting the person would orphan that history.
-  isActive   Boolean @default(true) @map("is_active")
+  isActive   Boolean  @default(true) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  assignedContacts Contact[]
+  assignedContacts Contact[]           @relation("ContactAssignee")
+  /// Leads this person put into the system, which is not the same set as the ones they own —
+  /// an importer rarely keeps what they upload, and an admin adding a lead may hand it straight on.
+  originatedContacts Contact[]         @relation("ContactOrigin")
   importBatches    ImportBatch[]
   attempts         ContactAttempt[]
+  stageChanges     ContactStageChange[]
 
   @@map("team_members")
 }
@@ -253,7 +281,7 @@ model TeamMember {
 /// enquiry on this row, not a competing copy of it. That matters most once contacts are
 /// assigned to individual salespeople, because two rows for one human means two owners.
 model Contact {
-  id String @id @default(uuid()) @db.Uuid
+  id      String  @id @default(uuid()) @db.Uuid
   /// Stored lowercased and trimmed — the unique index is what enforces one row per person, so
   /// casing must be normalised before it reaches the database.
   email   String  @unique @db.VarChar(320)
@@ -262,22 +290,69 @@ model Contact {
   /// Imported prospect lists almost always carry one, and a sales team needs it.
   phone   String? @db.VarChar(40)
 
-  status LeadStatus @default(NEW)
+  /// Where they are in the pipeline. Replaced the old NEW/READ/ARCHIVED status, which described
+  /// an inbox rather than a sales process and had no room for "qualified" or "lost".
+  stageId String        @map("stage_id") @db.Uuid
+  stage   PipelineStage @relation(fields: [stageId], references: [id], onDelete: Restrict)
+
+  /// Hides someone from the working list without deleting them. The everyday alternative to a
+  /// real delete, which stays admin-only and takes their whole history with it.
+  isArchived Boolean @default(false) @map("is_archived")
+
+  /// When someone should next be chased. One date rather than a task list: the attempts
+  /// timeline already records what actually happened, and a plain column sorts and filters
+  /// without a subquery — which matters because the leads table pages in the database.
+  nextFollowUpAt DateTime? @map("next_follow_up_at") @db.Timestamptz(6)
+
   /// Internal working notes. Never leaves the panel.
-  notes  String?
+  notes String?
 
   assignedToId String?     @map("assigned_to_id") @db.Uuid
-  assignedTo   TeamMember? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo   TeamMember? @relation("ContactAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedAt   DateTime?   @map("assigned_at") @db.Timestamptz(6)
+
+  /// How this person got into the system, recorded once when their row is created and never
+  /// rewritten.
+  ///
+  /// Not the same question as `Enquiry.source`, which answers it per approach: someone imported
+  /// from a list in March and then filling in the website form in June has two enquiries with
+  /// different sources, but they were still *added* by the import. Denormalised onto the contact
+  /// rather than derived from the earliest enquiry because the leads table sorts, filters and
+  /// pages on it in the database — deriving it would mean a subquery per row, and the reports
+  /// would have to group over "earliest enquiry per contact" instead of one indexed column.
+  ///
+  /// The enum is shared with `Enquiry` on purpose. A second, parallel list of the same three
+  /// words is a list that eventually disagrees with the first.
+  originSource EnquirySource @map("origin_source")
+  /// Who put them here. Null for the website form, where nobody did.
+  originMemberId String?     @map("origin_member_id") @db.Uuid
+  originMember   TeamMember? @relation("ContactOrigin", fields: [originMemberId], references: [id], onDelete: SetNull)
+  /// Snapshot of their name, for the same reason `contact_attempts.member_name` is one: removing
+  /// a team member must not turn "added by Sara" into "added by nobody".
+  originMemberName String?      @map("origin_member_name") @db.VarChar(120)
+  /// The spreadsheet they arrived in. Only ever set when `originSource` is IMPORT.
+  originBatchId    String?      @map("origin_batch_id") @db.Uuid
+  originBatch      ImportBatch? @relation(fields: [originBatchId], references: [id], onDelete: SetNull)
+  /// The free-text label the website form passed with the submission — a page name, a campaign.
+  /// Only ever set when `originSource` is CONTACT_FORM, and only when the site bothers to send it.
+  originLabel      String?      @map("origin_label") @db.VarChar(40)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  enquiries Enquiry[]
-  attempts  ContactAttempt[]
+  enquiries         Enquiry[]
+  attempts          ContactAttempt[]
+  stageChanges      ContactStageChange[]
+  customFieldValues ContactFieldValue[]
 
-  @@index([status, createdAt])
-  @@index([assignedToId, status])
+  @@index([stageId, createdAt])
+  @@index([assignedToId, stageId])
+  @@index([isArchived, nextFollowUpAt])
+  /// The three shapes the Source filter and the reports query: by channel, by spreadsheet, and
+  /// by the person who added them.
+  @@index([originSource, createdAt])
+  @@index([originBatchId])
+  @@index([originMemberId])
   @@map("contacts")
 }
 
@@ -300,7 +375,7 @@ model Enquiry {
   contactId String  @map("contact_id") @db.Uuid
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  source EnquirySource
+  source  EnquirySource
   /// What they actually said. Null for import events, which carry no message.
   message String?
 
@@ -332,20 +407,65 @@ model ContactAttempt {
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   /// Who made the attempt. Kept even if they leave the team, so history stays attributable.
-  memberId String?     @map("member_id") @db.Uuid
-  member   TeamMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  memberId   String?     @map("member_id") @db.Uuid
+  member     TeamMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
   /// Snapshot of their name, so a deleted member doesn't turn history anonymous.
-  memberName String @map("member_name") @db.VarChar(120)
+  memberName String      @map("member_name") @db.VarChar(120)
 
   channel String  @db.VarChar(40)
   outcome String  @db.VarChar(60)
   note    String?
 
+  /// The follow-up date promised *at the time of this attempt*.
+  ///
+  /// `contacts.next_follow_up_at` holds only the current one, and rescheduling overwrites it.
+  /// Keeping the promise on the attempt means the timeline can still say "said they'd decide by
+  /// 12 July" after the date has moved twice.
+  nextDueAt DateTime? @map("next_due_at") @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// The stage move this attempt caused, if it caused one.
+  stageChange ContactStageChange?
 
   @@index([contactId, createdAt])
   @@index([memberId, createdAt])
   @@map("contact_attempts")
+}
+
+/// One move between pipeline stages. Append-only.
+///
+/// A separate table rather than two columns on `contact_attempts` because a lead can be moved
+/// without anybody phoning them — from the table's bulk actions, or the stage bar on the detail
+/// page. Recording it only alongside an attempt would lose exactly those moves, and
+/// "when did this become Qualified?" is the question a pipeline gets asked.
+///
+/// `fromStage` / `toStage` are text snapshots for the same reason `contact_attempts.channel` is:
+/// renaming a stage must not rewrite what happened last month.
+model ContactStageChange {
+  id        String  @id @default(uuid()) @db.Uuid
+  contactId String  @map("contact_id") @db.Uuid
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  memberId   String?     @map("member_id") @db.Uuid
+  member     TeamMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  memberName String      @map("member_name") @db.VarChar(120)
+
+  /// Null on the very first move, which is the lead arriving rather than being moved.
+  fromStage String? @map("from_stage") @db.VarChar(60)
+  toStage   String  @map("to_stage") @db.VarChar(60)
+  reason    String?
+
+  /// Set when the move came out of the follow-up wizard, so the two render as one event rather
+  /// than two entries a second apart. Unique because one attempt moves a lead at most once.
+  attemptId String?         @unique @map("attempt_id") @db.Uuid
+  attempt   ContactAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([contactId, createdAt])
+  @@index([memberId, createdAt])
+  @@map("contact_stage_changes")
 }
 
 /// The editable vocabulary for logging an attempt. Two small ordered lists rather than
@@ -370,6 +490,85 @@ model AttemptOutcome {
   @@map("attempt_outcomes")
 }
 
+enum CustomFieldKind {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  DATE
+  CHECKBOX
+  URL
+  SINGLE_SELECT
+  MULTI_SELECT
+
+  @@map("custom_field_kind")
+}
+
+/// An extra thing this team wants to record about a person, defined by an admin at runtime.
+///
+/// The alternative was adding columns to `contacts` for every request, which needs a developer
+/// and a migration each time. A definition table means "Industry", "Budget" and "Campaign" are
+/// data, not schema.
+///
+/// Retired, never deleted — the values stay, and re-enabling brings them back. That is how every
+/// other vocabulary in this system behaves, and it means no admin can destroy 200 people's data
+/// with one mis-click.
+model ContactFieldDefinition {
+  id        String          @id @default(uuid()) @db.Uuid
+  /// Stable slug. Lets an export or an import mapping refer to a field by something other than
+  /// its display label, which an admin may rename at any time.
+  key       String          @unique @db.VarChar(64)
+  label     String          @db.VarChar(60)
+  kind      CustomFieldKind
+  /// Only meaningful for SINGLE_SELECT and MULTI_SELECT. Empty for every other kind.
+  options   String[]
+  helpText  String?         @map("help_text") @db.VarChar(200)
+  sortOrder Int             @map("sort_order")
+  isActive  Boolean         @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  values ContactFieldValue[]
+
+  @@index([sortOrder])
+  @@map("contact_field_definitions")
+}
+
+/// One custom field's value for one person.
+///
+/// Typed columns rather than a single text blob, because the leads table sorts on these: a text
+/// column would order 9 after 10 and "12 Aug" after "1 Jan". Exactly one of them is populated,
+/// chosen by the definition's `kind`.
+///
+/// Cascades from the contact — an erasure request has to take these with it.
+model ContactFieldValue {
+  id        String  @id @default(uuid()) @db.Uuid
+  contactId String  @map("contact_id") @db.Uuid
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  definitionId String                 @map("definition_id") @db.Uuid
+  definition   ContactFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  valueText    String?   @map("value_text")
+  valueNumber  Decimal?  @map("value_number") @db.Decimal(18, 4)
+  /// A calendar date, not an instant — `@db.Date` so a renewal date can't shift a day when the
+  /// server and the reader disagree about timezone.
+  valueDate    DateTime? @map("value_date") @db.Date
+  valueBoolean Boolean?  @map("value_boolean")
+  valueOptions String[]  @map("value_options")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// One value per field per person. This is what makes a value a fact about someone rather
+  /// than an append-only pile the UI has to pick a winner from.
+  @@unique([contactId, definitionId])
+  /// One index per sortable column — the table orders by these with a definition_id filter.
+  @@index([definitionId, valueText])
+  @@index([definitionId, valueNumber])
+  @@index([definitionId, valueDate])
+  @@map("contact_field_values")
+}
+
 enum AutoAssignMode {
   /// New website leads arrive with no owner and wait for an admin.
   UNASSIGNED
@@ -388,16 +587,29 @@ enum AutoAssignMode {
 model LeadSettings {
   id String @id
 
-  autoAssignMode     AutoAssignMode @default(UNASSIGNED) @map("auto_assign_mode")
-  autoAssignMemberId String?        @map("auto_assign_member_id") @db.Uuid
+  autoAssignMode       AutoAssignMode @default(UNASSIGNED) @map("auto_assign_mode")
+  autoAssignMemberId   String?        @map("auto_assign_member_id") @db.Uuid
   /// Round-robin pointer: who got the last one. Persisted because the rotation has to
   /// survive a restart, and a serverless instance has no memory of the previous request.
-  lastAssignedMemberId String? @map("last_assigned_member_id") @db.Uuid
+  lastAssignedMemberId String?        @map("last_assigned_member_id") @db.Uuid
 
   salesCanEditContact       Boolean @default(true) @map("sales_can_edit_contact")
   salesCanClaimUnassigned   Boolean @default(false) @map("sales_can_claim_unassigned")
   salesCanExport            Boolean @default(false) @map("sales_can_export")
   salesCanSeeOthersAttempts Boolean @default(false) @map("sales_can_see_others_attempts")
+  /// Whether Sales may move a lead into a WON or LOST stage. Off by default: the numbers a
+  /// business reports on shouldn't be self-declared.
+  salesCanCloseLeads        Boolean @default(false) @map("sales_can_close_leads")
+  salesCanEditCustomFields  Boolean @default(false) @map("sales_can_edit_custom_fields")
+
+  /// The leads table's column layout — an ordered array of
+  /// `{ key: "builtin:name" | "custom:<definitionId>", visible, width }`.
+  ///
+  /// One home for the whole layout, deliberately. Splitting visibility across this and a flag on
+  /// each field definition would give two places to disagree about whether a column shows, and
+  /// nothing to arbitrate between them. Global rather than per-person: an admin composes one
+  /// table for the team.
+  leadsTableColumns Json @default("[]") @map("leads_table_columns")
 
   /// Default action for an imported row whose email already exists: enrich | log | overwrite | skip.
   importDefaultMatchAction String  @default("enrich") @map("import_default_match_action") @db.VarChar(16)
@@ -426,6 +638,10 @@ model ImportBatch {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   enquiries Enquiry[]
+  /// The contacts this file *created*, which is a smaller set than the enquiries it wrote — a row
+  /// matching someone already here logs an enquiry against them without changing where they came
+  /// from. "Everyone from the trade-show list" means this one.
+  originatedContacts Contact[]
 
   @@index([createdAt])
   @@map("import_batches")
@@ -434,20 +650,20 @@ model ImportBatch {
 /// An immutable published snapshot. Append-only: publishing writes a new row, it never
 /// updates an old one, so every release stays inspectable and restorable.
 model ContentRelease {
-  id      String @id @default(uuid()) @db.Uuid
+  id               String   @id @default(uuid()) @db.Uuid
   /// Monotonic, human-readable release number. v1, v2, v3…
-  version Int    @unique
+  version          Int      @unique
   /// The whole site payload, shaped exactly like the site's TS arrays.
-  payload Json
+  payload          Json
   /// Optional note from whoever published ("fixed the FAQ typo").
-  note    String? @db.VarChar(200)
+  note             String?  @db.VarChar(200)
   /// Email of the admin who pressed Publish.
-  publishedBy String?  @map("published_by") @db.VarChar(320)
-  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  publishedBy      String?  @map("published_by") @db.VarChar(320)
+  publishedAt      DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
   /// Outcome of pinging the site's revalidate hook: skipped | ok | failed.
   /// "skipped" is the expected value until the site is actually wired up.
-  revalidateStatus String? @map("revalidate_status") @db.VarChar(16)
-  revalidateDetail String? @map("revalidate_detail")
+  revalidateStatus String?  @map("revalidate_status") @db.VarChar(16)
+  revalidateDetail String?  @map("revalidate_detail")
 
   @@index([publishedAt])
   @@map("content_releases")

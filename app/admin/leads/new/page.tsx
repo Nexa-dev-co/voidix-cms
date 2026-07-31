@@ -1,4 +1,5 @@
 import { NewContactForm } from "@/app/admin/leads/new/NewContactForm";
+import ReadingColumn from "@/components/layout/ReadingColumn";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { requireMember } from "@/lib/auth";
 
@@ -6,7 +7,7 @@ export default async function NewContactPage() {
   await requireMember();
 
   return (
-    <>
+    <ReadingColumn>
       <PageHeader
         eyebrow="Leads"
         title="Add a lead"
@@ -14,6 +15,6 @@ export default async function NewContactPage() {
       />
 
       <NewContactForm />
-    </>
+    </ReadingColumn>
   );
 }

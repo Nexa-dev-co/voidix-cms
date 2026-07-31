@@ -18,6 +18,9 @@ const CONTENT_ITEMS = [
 // Neither is copy you edit, so grouping them together would blur what "publish" acts on.
 const OPERATIONS_ITEMS = [
   { href: "/admin/leads", label: "Leads", adminOnly: false },
+  // Both roles: the page scopes itself through visibility.ts, so a salesperson opening it sees
+  // their own pipeline rather than the team's.
+  { href: "/admin/reports", label: "Reports", adminOnly: false },
   { href: "/admin/team", label: "Team", adminOnly: true },
   { href: "/admin/settings", label: "Settings", adminOnly: true },
   { href: "/admin/releases", label: "Releases", adminOnly: true },
@@ -36,7 +39,7 @@ export function SidebarNav({ role }: { role: TeamRole }) {
     }`;
 
   return (
-    <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+    <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
       <Link
         href="/admin"
         aria-current={isActive("/admin") ? "page" : undefined}
@@ -75,7 +78,7 @@ export function SidebarNav({ role }: { role: TeamRole }) {
           );
         })}
 
-      <span aria-hidden className="hidden md:my-2 md:block md:border-t md:border-border" />
+      <span aria-hidden className="hidden lg:my-2 lg:block lg:border-t lg:border-border" />
 
       {OPERATIONS_ITEMS.filter((item) => isAdmin || !item.adminOnly).map((item) => {
         const active = isActive(item.href);
