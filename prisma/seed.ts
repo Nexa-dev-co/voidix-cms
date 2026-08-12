@@ -15,10 +15,22 @@ import { PrismaClient } from "../generated/prisma/client";
 // Seeding is idempotent: it upserts on `slug` (services, projects) and on question text
 // (FAQ), so re-running it will not duplicate rows or clobber an edit made in the panel to a
 // field the seed does not set.
+//
+// Contact, Footer, About and Careers are deliberately absent. Their starting copy lives in the
+// page component that renders the form, so an editor sees it in the fields and nothing is
+// written until they press Save — a section that has never been saved is a state the payload
+// reports as `null`, and pre-seeding it would throw that signal away.
+//
+// ⚠ CAREER ROLES ARE ABSENT FOR A STRONGER REASON. The four openings in the site's
+// careersContent.ts are invented placeholders describing no vacancy that exists, and unlike a
+// placeholder project they are a thing a person can waste an afternoon on. An empty roles list
+// is the honest default — the careers page is built to stand in exactly that state and renders
+// its own empty line. Real roles get typed in when they are real.
 
 const SERVICES = [
   {
     slug: "web-experiences",
+    discipline: "web",
     name: "Web Experiences",
     eyebrow: "Interfaces with escape velocity",
     description:
@@ -27,6 +39,7 @@ const SERVICES = [
   },
   {
     slug: "mobile-systems",
+    discipline: "mobile",
     name: "Mobile Systems",
     eyebrow: "Native, in every dimension",
     description:
@@ -35,6 +48,7 @@ const SERVICES = [
   },
   {
     slug: "enterprise-platforms",
+    discipline: "enterprise",
     name: "Enterprise Platforms",
     eyebrow: "Gravity for your pipeline",
     description:
@@ -43,6 +57,7 @@ const SERVICES = [
   },
   {
     slug: "artificial-intelligence",
+    discipline: "ai",
     name: "Artificial Intelligence",
     eyebrow: "Intelligence in orbit",
     description:
@@ -54,6 +69,7 @@ const SERVICES = [
 const PROJECTS = [
   {
     slug: "aphelion",
+    discipline: "enterprise",
     title: "Aphelion",
     client: "Private markets desk",
     year: "2026",
@@ -63,6 +79,7 @@ const PROJECTS = [
   },
   {
     slug: "meridian",
+    discipline: "mobile",
     title: "Meridian",
     client: "Care network",
     year: "2025",
@@ -72,6 +89,7 @@ const PROJECTS = [
   },
   {
     slug: "cinder",
+    discipline: "web",
     title: "Cinder",
     client: "Fashion house",
     year: "2025",
@@ -81,6 +99,7 @@ const PROJECTS = [
   },
   {
     slug: "halcyon",
+    discipline: "ai",
     title: "Halcyon",
     client: "Analytics platform",
     year: "2026",
@@ -155,13 +174,33 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
+  // The four disciplines are created by migration, not here — they are the vocabulary the
+  // site keys off, so they exist before any content does. This maps their key to their id.
+  const disciplineIdByKey = new Map(
+    (await prisma.discipline.findMany({ select: { id: true, key: true } })).map((discipline) => [
+      discipline.key,
+      discipline.id,
+    ]),
+  );
+
+  function disciplineId(key: string): string {
+    const id = disciplineIdByKey.get(key);
+
+    if (!id) {
+      throw new Error(`No discipline "${key}" — run migrations before seeding.`);
+    }
+
+    return id;
+  }
+
   for (const [position, service] of SERVICES.entries()) {
-    const { capabilities, ...fields } = service;
+    const { capabilities, discipline, ...fields } = service;
+    const data = { ...fields, sortOrder: position, disciplineId: disciplineId(discipline) };
 
     const record = await prisma.service.upsert({
       where: { slug: service.slug },
-      create: { ...fields, sortOrder: position },
-      update: { ...fields, sortOrder: position },
+      create: data,
+      update: data,
     });
 
     // Child rows are ordered and small, so replacing the set outright is simpler and safer
@@ -177,12 +216,13 @@ async function main() {
   }
 
   for (const [position, project] of PROJECTS.entries()) {
-    const { tags, ...fields } = project;
+    const { tags, discipline, ...fields } = project;
+    const data = { ...fields, sortOrder: position, disciplineId: disciplineId(discipline) };
 
     const record = await prisma.project.upsert({
       where: { slug: project.slug },
-      create: { ...fields, sortOrder: position },
-      update: { ...fields, sortOrder: position },
+      create: data,
+      update: data,
     });
 
     await prisma.projectTag.deleteMany({ where: { projectId: record.id } });

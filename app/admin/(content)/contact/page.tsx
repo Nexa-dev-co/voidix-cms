@@ -6,22 +6,14 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// Shown before anything has ever been saved, so the form is never rendered with empty
-// required fields. Written in the site's voice rather than as lorem, because placeholder copy
-// that reads like real copy is easier to judge and replace than "Lorem ipsum".
+// The copy the section ships today, from components/sections/Contact/contactContent.ts and the
+// two EnquiryForm props it is rendered with. Shown until the section is saved here for the
+// first time, so the form is never rendered with empty required fields.
 const CONTACT_DEFAULTS: ContactFormValues = {
-  eyebrow: "Transmission",
-  titleLine1: "Tell us what",
-  titleLine2: "breaks today.",
-  description:
-    "Not a spec — a problem. We come back inside a week with a shape for it: what we would build, what we would refuse to build, and what it takes.",
-  emailAddress: "hello@voidix.com",
-  formNameLabel: "Your name",
-  formEmailLabel: "Email",
-  formMessageLabel: "What are you building?",
-  submitLabel: "Send",
-  successMessage: "Received. We'll come back to you inside a week.",
-  errorMessage: "That didn't send. Try again, or email us directly.",
+  title: "Tell us what you are building.",
+  lead: "A paragraph is enough — what it is, who it is for, and what has to be true on the day it ships. You will get an answer from the people who would build it, not a sales desk.",
+  briefLabel: "What you are building",
+  submitLabel: "Send it",
 };
 
 export default async function ContactPage() {
@@ -32,15 +24,14 @@ export default async function ContactPage() {
       <PageHeader
         eyebrow="Section 04"
         title="Contact"
-        description="Every string the contact section and its form render."
+        description="The section's title and lead, and the two strings its form actually reads."
       />
 
       {!contact && (
         <PageHeaderNote>
-          The site has no Contact section yet — the navbar links to{" "}
-          <code className="text-fg">#contact</code> and nothing is there. These fields are
-          pre-filled with placeholder copy and are not saved until you press Save. Building the
-          section itself is a developer task.
+          Nothing has been saved here yet, so these fields hold the copy the section ships today —
+          nothing is stored until you press Save. The site does not read this database yet, so an
+          edit here changes the draft, not the live page.
         </PageHeaderNote>
       )}
 

@@ -4,13 +4,20 @@ import { useActionState } from "react";
 
 import { updateServiceAction } from "@/app/admin/(content)/services/actions";
 import { ButtonLink } from "@/components/ui/Button";
-import { ChipListField, FormMessage, TextAreaField, TextField } from "@/components/ui/Field";
+import {
+  ChipListField,
+  FormMessage,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { IDLE_FORM_STATE } from "@/lib/forms/formState";
 import { FIELD_LIMITS } from "@/lib/validation/contentSchemas";
 
 export function ServiceForm({
   service,
+  disciplines,
 }: {
   service: {
     id: string;
@@ -18,7 +25,9 @@ export function ServiceForm({
     eyebrow: string;
     description: string;
     capabilities: string[];
+    disciplineId: string;
   };
+  disciplines: { id: string; label: string }[];
 }) {
   const [state, formAction] = useActionState(updateServiceAction, IDLE_FORM_STATE);
 
@@ -64,6 +73,18 @@ export function ServiceForm({
         maxCount={FIELD_LIMITS.capabilityCount}
         error={state.fieldErrors.capabilities}
         hint="Comma separated. Order is the order they appear in."
+      />
+
+      <SelectField
+        label="Enquiries about"
+        name="disciplineId"
+        defaultValue={service.disciplineId}
+        options={disciplines.map((discipline) => ({
+          value: discipline.id,
+          label: discipline.label,
+        }))}
+        error={state.fieldErrors.disciplineId}
+        hint="What this craft's call to action asks about. The plain words a visitor would write in an email, not the name above — edit the wording under Enquiry form."
       />
 
       <div className="flex items-center gap-3 border-t border-border pt-6">

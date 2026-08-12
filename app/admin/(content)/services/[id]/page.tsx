@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 export default async function EditServicePage(props: PageProps<"/admin/services/[id]">) {
   const { id } = await props.params;
 
-  const service = await prisma.service.findUnique({
-    where: { id },
-    include: { capabilities: { orderBy: { sortOrder: "asc" } } },
-  });
+  const [service, disciplines] = await Promise.all([
+    prisma.service.findUnique({
+      where: { id },
+      include: { capabilities: { orderBy: { sortOrder: "asc" } } },
+    }),
+    prisma.discipline.findMany({ orderBy: { sortOrder: "asc" } }),
+  ]);
 
   if (!service) {
     notFound();
@@ -34,7 +37,9 @@ export default async function EditServicePage(props: PageProps<"/admin/services/
           eyebrow: service.eyebrow,
           description: service.description,
           capabilities: service.capabilities.map((capability) => capability.label),
+          disciplineId: service.disciplineId,
         }}
+        disciplines={disciplines}
       />
     </>
   );

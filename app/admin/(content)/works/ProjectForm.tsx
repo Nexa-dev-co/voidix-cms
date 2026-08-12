@@ -4,7 +4,13 @@ import { useActionState } from "react";
 
 import { createProjectAction, updateProjectAction } from "@/app/admin/(content)/works/actions";
 import { ButtonLink } from "@/components/ui/Button";
-import { ChipListField, FormMessage, TextAreaField, TextField } from "@/components/ui/Field";
+import {
+  ChipListField,
+  FormMessage,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { IDLE_FORM_STATE } from "@/lib/forms/formState";
 import { FIELD_LIMITS } from "@/lib/validation/contentSchemas";
@@ -16,9 +22,16 @@ export interface ProjectFormValues {
   year: string;
   description: string;
   tags: string[];
+  disciplineId: string;
 }
 
-export function ProjectForm({ project }: { project?: ProjectFormValues }) {
+export function ProjectForm({
+  project,
+  disciplines,
+}: {
+  project?: ProjectFormValues;
+  disciplines: { id: string; label: string }[];
+}) {
   const isEditing = Boolean(project?.id);
   const [state, formAction] = useActionState(
     isEditing ? updateProjectAction : createProjectAction,
@@ -77,6 +90,18 @@ export function ProjectForm({ project }: { project?: ProjectFormValues }) {
         maxCount={FIELD_LIMITS.tagCount}
         error={state.fieldErrors.tags}
         hint="Comma separated. Order is the order they appear in."
+      />
+
+      <SelectField
+        label="Kind of work"
+        name="disciplineId"
+        defaultValue={project?.disciplineId ?? disciplines[0]?.id}
+        options={disciplines.map((discipline) => ({
+          value: discipline.id,
+          label: discipline.label,
+        }))}
+        error={state.fieldErrors.disciplineId}
+        hint="Renders as the project's type key, and decides what its call to action enquires about. Same vocabulary the services sell — edit the wording under Enquiry form."
       />
 
       <div className="flex items-center gap-3 border-t border-border pt-6">

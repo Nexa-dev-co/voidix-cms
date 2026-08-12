@@ -35,13 +35,14 @@ export async function updateServiceAction(
     eyebrow: formData.get("eyebrow") ?? "",
     description: formData.get("description") ?? "",
     capabilities: formData.get("capabilities") ?? "",
+    disciplineId: formData.get("disciplineId") ?? "",
   });
 
   if (!parsed.success) {
     return formErrorFromZod(parsed.error);
   }
 
-  const { name, eyebrow, description, capabilities } = parsed.data;
+  const { name, eyebrow, description, capabilities, disciplineId } = parsed.data;
 
   const existing = await prisma.service.findUnique({ where: { id }, select: { id: true } });
 
@@ -52,7 +53,7 @@ export async function updateServiceAction(
   await prisma.$transaction([
     prisma.service.update({
       where: { id },
-      data: { name, eyebrow, description },
+      data: { name, eyebrow, description, disciplineId },
     }),
     // Chips carry no identity of their own, so replacing the set is simpler than diffing it
     // and guarantees the stored order matches what was typed.

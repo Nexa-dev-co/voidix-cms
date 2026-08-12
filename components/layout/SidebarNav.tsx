@@ -12,12 +12,25 @@ const CONTENT_ITEMS = [
   { href: "/admin/faq", label: "FAQ", number: "03" },
   { href: "/admin/contact", label: "Contact", number: "04" },
   { href: "/admin/footer", label: "Footer", number: "05" },
+  // The document pages. They sit after the five homepage sections because that is the order a
+  // visitor meets them — the homepage first, then the two pages it links out to.
+  { href: "/admin/about", label: "About", number: "06" },
+  { href: "/admin/careers", label: "Careers", number: "07" },
+  // Last because it is not a section of the site — it is the form that appears inside six of
+  // them, plus the vocabulary its subject line comes from.
+  { href: "/admin/enquiry-form", label: "Enquiry form", number: "08" },
 ] as const;
 
 // Separated from the content sections: leads are inbound work and releases are a log.
 // Neither is copy you edit, so grouping them together would blur what "publish" acts on.
 const OPERATIONS_ITEMS = [
   { href: "/admin/leads", label: "Leads", adminOnly: false },
+  // What the website sent, before anyone has decided it is worth anything. Admin-only: neither
+  // table has an owner column, so `visibility.ts` has nothing to scope by and the role is the
+  // whole gate. Directly above Leads' neighbours because triaging it feeds them.
+  { href: "/admin/inbox", label: "Inbox", adminOnly: true },
+  // Hiring, not sales. A CV is not pipeline material.
+  { href: "/admin/applications", label: "Applications", adminOnly: true },
   // Both roles: the page scopes itself through visibility.ts, so a salesperson opening it sees
   // their own pipeline rather than the team's.
   { href: "/admin/reports", label: "Reports", adminOnly: false },

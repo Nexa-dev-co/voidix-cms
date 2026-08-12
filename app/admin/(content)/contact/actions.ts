@@ -15,17 +15,10 @@ export async function updateContactAction(
   await requireAdmin();
 
   const parsed = contactSchema.safeParse({
-    eyebrow: formData.get("eyebrow") ?? "",
-    titleLine1: formData.get("titleLine1") ?? "",
-    titleLine2: formData.get("titleLine2") ?? "",
-    description: formData.get("description") ?? "",
-    emailAddress: formData.get("emailAddress") ?? "",
-    formNameLabel: formData.get("formNameLabel") ?? "",
-    formEmailLabel: formData.get("formEmailLabel") ?? "",
-    formMessageLabel: formData.get("formMessageLabel") ?? "",
+    title: formData.get("title") ?? "",
+    lead: formData.get("lead") ?? "",
+    briefLabel: formData.get("briefLabel") ?? "",
     submitLabel: formData.get("submitLabel") ?? "",
-    successMessage: formData.get("successMessage") ?? "",
-    errorMessage: formData.get("errorMessage") ?? "",
   });
 
   if (!parsed.success) {

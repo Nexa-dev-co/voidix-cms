@@ -8,13 +8,24 @@ const LOGIN_PATH = "/login";
 /**
  * Paths that skip the session check.
  *
- * `/api/leads` is the site's contact-form intake and is called by a machine, not a browser —
- * redirecting it to the login page would turn every submission into a silent 307 that the
- * caller reads as success. It runs its own authentication (shared secret, origin allowlist,
- * rate limit, honeypot) in lib/leads/intake.ts. Anything added to this set must do the same:
- * this is the list of routes with no session behind them.
+ * `/api/submissions` (the enquiry form) and `/api/applications` (the careers form) are called by
+ * a machine, not a browser — redirecting them to the login page would turn every submission into
+ * a silent 307 that the caller reads as success. Both run their own authentication (shared
+ * secret, origin allowlist, rate limit, honeypot) through lib/leads/intake.ts, and both fail
+ * closed when it is unconfigured. Anything added to this set must do the same: this is the list
+ * of routes with no session behind them.
+ *
+ * `/api/content` is the site's read side and is machine-called for the same reason — a rebuild
+ * following a 307 to the login page would bake the login HTML in as the site's copy. It carries
+ * the same obligation and meets it with its own secret (`CONTENT_READ_SECRET`), failing closed
+ * when that is unset. It is not on the intake guard on purpose; see the route's header.
  */
-const PUBLIC_PATHS = new Set<string>([LOGIN_PATH, "/api/leads"]);
+const PUBLIC_PATHS = new Set<string>([
+  LOGIN_PATH,
+  "/api/submissions",
+  "/api/applications",
+  "/api/content",
+]);
 
 /**
  * Refreshes the Supabase session on every request and bounces anonymous visitors to the
@@ -66,8 +77,8 @@ export async function updateSessionAndGuard(request: NextRequest) {
   }
 
   // Only the login page bounces an already-signed-in visitor onwards. Checking `isPublicPath`
-  // here instead would redirect POSTs to /api/leads whenever the caller happened to carry a
-  // valid session cookie, turning a stored lead into a 307 to the dashboard.
+  // here instead would redirect POSTs to the intake routes whenever the caller happened to carry
+  // a valid session cookie, turning a stored submission into a 307 to the dashboard.
   if (user && pathname === LOGIN_PATH) {
     const adminUrl = request.nextUrl.clone();
     adminUrl.pathname = "/admin";

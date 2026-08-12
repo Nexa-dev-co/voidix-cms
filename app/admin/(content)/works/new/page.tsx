@@ -1,8 +1,13 @@
 import { ProjectForm } from "@/app/admin/(content)/works/ProjectForm";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageHeaderNote } from "@/components/ui/PageHeaderNote";
+import { prisma } from "@/lib/prisma";
 
-export default function NewProjectPage() {
+export const dynamic = "force-dynamic";
+
+export default async function NewProjectPage() {
+  const disciplines = await prisma.discipline.findMany({ orderBy: { sortOrder: "asc" } });
+
   return (
     <>
       <PageHeader
@@ -18,7 +23,7 @@ export default function NewProjectPage() {
         silhouette is a developer task.
       </PageHeaderNote>
 
-      <ProjectForm />
+      <ProjectForm disciplines={disciplines} />
     </>
   );
 }

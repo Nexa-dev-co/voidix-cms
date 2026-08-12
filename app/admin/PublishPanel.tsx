@@ -9,12 +9,18 @@ import { IDLE_FORM_STATE } from "@/lib/forms/formState";
 import { FIELD_LIMITS } from "@/lib/validation/contentSchemas";
 import type { DraftStatus } from "@/lib/content/contentPayload";
 
+// Ordered as the sidebar orders them, so the badges read in the same sequence as the nav.
+// `Record` over the key union rather than a loose object: a section added to the payload and
+// forgotten here is a type error instead of a badge that silently never appears.
 const SECTION_LABELS: Record<keyof DraftStatus["changedSections"], string> = {
   services: "Services",
   projects: "Works",
   faq: "FAQ",
   contact: "Contact",
   footer: "Footer",
+  about: "About",
+  careers: "Careers",
+  enquiryForm: "Enquiry form",
 };
 
 export function PublishPanel({ draftStatus }: { draftStatus: DraftStatus }) {

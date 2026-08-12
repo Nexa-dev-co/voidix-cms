@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { findMarkdownWarnings } from "@/lib/text/plainText";
-import { isSafeLinkUrl } from "@/lib/validation/contentSchemas";
+import { isExternalLinkUrl, isSafeLinkUrl } from "@/lib/validation/contentSchemas";
 
 const CONTROL_CLASSES =
   "w-full rounded-sm border border-border bg-field px-3 py-2 text-sm text-fg placeholder:text-muted transition-colors duration-150 hover:border-border-strong focus:border-accent focus:outline-none";
@@ -130,6 +130,40 @@ export function TextAreaField({
         onChange={(event) => setValue(event.target.value)}
         className={`${CONTROL_CLASSES} resize-y leading-relaxed`}
       />
+    </FieldShell>
+  );
+}
+
+/**
+ * A choice from a fixed list.
+ *
+ * No counter: there is nothing to count when the value is one of a handful of known options, and
+ * a counter over a select reads as an input that can overflow when it cannot.
+ */
+export function SelectField({
+  label,
+  name,
+  defaultValue,
+  options,
+  hint,
+  error,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  options: { value: string; label: string }[];
+  hint?: string;
+  error?: string;
+}) {
+  return (
+    <FieldShell label={label} hint={hint} error={error}>
+      <select name={name} defaultValue={defaultValue} className={CONTROL_CLASSES}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </FieldShell>
   );
 }
@@ -263,45 +297,258 @@ export function ParagraphsField({
   );
 }
 
+const GROUP_TITLE_LINE = /^\[(.*)\]$/;
+
 /**
- * Footer link lists, typed one per line as `Label | https://url`.
+ * The footer's titled link columns, as one block of text.
  *
- * A line-based textarea rather than a repeatable row widget: it pastes well, reorders by
- * moving a line, and needs no add/remove button choreography. The preview underneath parses
- * each line back out so the split is never a guess, and flags any URL the server will reject.
+ * A line-based textarea rather than a repeatable widget nested two levels deep: it pastes well,
+ * moves a link between groups by moving a line, and needs no add/remove choreography for either
+ * level. `[Group]` marks a heading; every line under it is `Label | href`.
+ *
+ * The preview is grouped the way the footer is, so the columns an editor is about to ship are
+ * visible as columns. It flags anything the server will reject and marks which destinations
+ * leave the site, because that flag is derived from the href rather than typed — showing it is
+ * the only way an editor can tell what the site will do with a link.
  */
-export function LinkListField({
+export function LinkGroupsField({
   label,
   name,
   defaultValue = [],
-  maxCount,
+  maxGroups,
+  maxLinksPerGroup,
   hint,
   error,
 }: {
   label: string;
   name: string;
-  defaultValue?: { label: string; url: string }[];
-  maxCount: number;
+  defaultValue?: { title: string; links: { label: string; href: string }[] }[];
+  maxGroups: number;
+  maxLinksPerGroup: number;
   hint?: string;
   error?: string;
 }) {
   const [value, setValue] = useState(
-    defaultValue.map((link) => `${link.label} | ${link.url}`).join("\n"),
+    defaultValue
+      .map((group) =>
+        [`[${group.title}]`, ...group.links.map((link) => `${link.label} | ${link.href}`)].join(
+          "\n",
+        ),
+      )
+      .join("\n\n"),
   );
 
-  const parsedLinks = value
+  const groups: { title: string; links: { label: string; href: string }[] }[] = [];
+  const orphanLinks: string[] = [];
+
+  for (const rawLine of value.split("\n")) {
+    const line = rawLine.trim();
+
+    if (line.length === 0) {
+      continue;
+    }
+
+    const titleMatch = GROUP_TITLE_LINE.exec(line);
+
+    if (titleMatch) {
+      groups.push({ title: titleMatch[1].trim(), links: [] });
+      continue;
+    }
+
+    const currentGroup = groups[groups.length - 1];
+
+    if (!currentGroup) {
+      orphanLinks.push(line);
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("|");
+    currentGroup.links.push(
+      separatorIndex === -1
+        ? { label: line, href: "" }
+        : {
+            label: line.slice(0, separatorIndex).trim(),
+            href: line.slice(separatorIndex + 1).trim(),
+          },
+    );
+  }
+
+  return (
+    <FieldShell
+      label={label}
+      hint={hint}
+      error={error}
+      counter={{ current: groups.length, max: maxGroups }}
+    >
+      <textarea
+        name={name}
+        rows={12}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={
+          "[Studio]\nAbout | /about\nCareers | /careers\n\n[Elsewhere]\nX | https://x.com/voidixstudio"
+        }
+        className={`${CONTROL_CLASSES} resize-y font-mono text-xs leading-relaxed`}
+      />
+
+      {orphanLinks.length > 0 && (
+        <p className="text-[11px] leading-relaxed text-danger">
+          {orphanLinks.length} link{orphanLinks.length === 1 ? "" : "s"} above the first group
+          heading. Every link needs a heading like <code>[Studio]</code> over it.
+        </p>
+      )}
+
+      {groups.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-3 pt-1">
+          {groups.map((group, groupIndex) => (
+            <div key={groupIndex} className="min-w-[9rem] flex-1">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted/50">
+                {group.title || <span className="text-danger">(no title)</span>}
+              </p>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {group.links.map((link, linkIndex) => (
+                  <li key={linkIndex} className="flex items-baseline gap-1.5 text-[11px]">
+                    <span className="shrink-0 text-fg">{link.label || "(no label)"}</span>
+                    {isSafeLinkUrl(link.href) && isExternalLinkUrl(link.href) && (
+                      <span aria-label="opens in a new tab" className="shrink-0 text-muted/40">
+                        ↗
+                      </span>
+                    )}
+                    <span
+                      className={`truncate ${isSafeLinkUrl(link.href) ? "text-muted" : "text-danger"}`}
+                    >
+                      {link.href || "(no destination)"}
+                    </span>
+                  </li>
+                ))}
+                {group.links.length === 0 && (
+                  <li className="text-[11px] text-danger">(no links)</li>
+                )}
+                {group.links.length > maxLinksPerGroup && (
+                  <li className="text-[11px] text-danger">
+                    {group.links.length} links — {maxLinksPerGroup} is the most in one column.
+                  </li>
+                )}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </FieldShell>
+  );
+}
+
+/**
+ * An ordered list of sentences, one per line.
+ *
+ * Not `ChipListField`, which also splits on commas — every entry here is a full sentence and
+ * most of them contain one. The preview is a numbered list rather than chips, because that is
+ * how these render: a role's responsibilities, not a row of tags.
+ */
+export function LineListField({
+  label,
+  name,
+  defaultValue = [],
+  maxEntry,
+  maxCount,
+  hint,
+  error,
+  placeholder,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string[];
+  maxEntry: number;
+  maxCount: number;
+  hint?: string;
+  error?: string;
+  placeholder?: string;
+}) {
+  const [value, setValue] = useState(defaultValue.join("\n"));
+
+  const entries = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  return (
+    <FieldShell
+      label={label}
+      hint={hint}
+      error={error}
+      counter={{ current: entries.length, max: maxCount }}
+      warnings={findMarkdownWarnings(value)}
+    >
+      <textarea
+        name={name}
+        rows={4}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => setValue(event.target.value)}
+        className={`${CONTROL_CLASSES} resize-y leading-relaxed`}
+      />
+
+      {entries.length > 0 && (
+        <ol className="flex flex-col gap-1 pt-1">
+          {entries.map((entry, index) => (
+            <li key={index} className="flex items-baseline gap-2 text-[11px]">
+              <span aria-hidden className="shrink-0 tabular-nums text-muted/50">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className={entry.length > maxEntry ? "text-danger" : "text-muted"}>
+                {entry}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </FieldShell>
+  );
+}
+
+/**
+ * An ordered list whose entries have several fields, typed one per line and separated by `|`.
+ *
+ * The same input shape as `LinkGroupsField` and chosen for the same reasons — it pastes, it
+ * reorders by moving a line, and it needs no add/remove choreography for a list four entries
+ * long. The preview splits each line back into its named parts, so an editor can see at a
+ * glance which segment landed where and that nothing is missing.
+ */
+export function DelimitedListField({
+  label,
+  name,
+  parts,
+  defaultValue = [],
+  maxCount,
+  hint,
+  error,
+  placeholder,
+}: {
+  label: string;
+  name: string;
+  /** In order, and each one required — the server rejects a line missing any of them. */
+  parts: readonly { key: string; label: string; max: number }[];
+  defaultValue?: Record<string, string>[];
+  maxCount: number;
+  hint?: string;
+  error?: string;
+  placeholder?: string;
+}) {
+  const [value, setValue] = useState(
+    defaultValue.map((entry) => parts.map((part) => entry[part.key] ?? "").join(" | ")).join("\n"),
+  );
+
+  const rows = value
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => {
-      const separatorIndex = line.indexOf("|");
-      if (separatorIndex === -1) {
-        return { label: line, url: "" };
-      }
-      return {
-        label: line.slice(0, separatorIndex).trim(),
-        url: line.slice(separatorIndex + 1).trim(),
-      };
+      const segments = line.split("|");
+
+      return parts.map((part, index) => ({
+        part,
+        text: (segments[index] ?? "").trim(),
+      }));
     });
 
   return (
@@ -309,34 +556,38 @@ export function LinkListField({
       label={label}
       hint={hint}
       error={error}
-      counter={{ current: parsedLinks.length, max: maxCount }}
+      counter={{ current: rows.length, max: maxCount }}
+      warnings={findMarkdownWarnings(value)}
     >
       <textarea
         name={name}
         rows={5}
         value={value}
+        placeholder={placeholder}
         onChange={(event) => setValue(event.target.value)}
-        placeholder={"X | https://x.com/voidix\nGitHub | https://github.com/voidix"}
         className={`${CONTROL_CLASSES} resize-y font-mono text-xs leading-relaxed`}
       />
 
-      {parsedLinks.length > 0 && (
-        <ul className="flex flex-col gap-1 pt-1">
-          {parsedLinks.map((link, index) => {
-            const isValid = isSafeLinkUrl(link.url);
-
-            return (
-              <li key={index} className="flex items-baseline gap-2 text-[11px]">
-                <span className="shrink-0 text-fg">{link.label || "(no label)"}</span>
-                <span aria-hidden className="text-muted/40">
-                  →
+      {rows.length > 0 && (
+        <ul className="flex flex-col gap-2 pt-1">
+          {rows.map((row, index) => (
+            <li key={index} className="flex flex-col gap-0.5 border-l border-border pl-2.5">
+              {row.map(({ part, text }) => (
+                <span key={part.key} className="flex items-baseline gap-2 text-[11px]">
+                  <span className="w-14 shrink-0 uppercase tracking-[0.12em] text-muted/50">
+                    {part.label}
+                  </span>
+                  <span
+                    className={
+                      text.length === 0 || text.length > part.max ? "text-danger" : "text-muted"
+                    }
+                  >
+                    {text.length === 0 ? "(missing)" : text}
+                  </span>
                 </span>
-                <span className={`truncate ${isValid ? "text-muted" : "text-danger"}`}>
-                  {link.url || "(no URL)"}
-                </span>
-              </li>
-            );
-          })}
+              ))}
+            </li>
+          ))}
         </ul>
       )}
     </FieldShell>

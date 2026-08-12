@@ -129,8 +129,9 @@ export default async function LeadsPage(props: PageProps<"/admin/leads">) {
           <PageHeaderNote>
             The website form intake is switched off —{" "}
             <code className="text-fg">LEADS_INTAKE_SECRET</code> is not set, so{" "}
-            <code className="text-fg">POST /api/leads</code> rejects everything. Adding and importing
-            leads here still works.
+            <code className="text-fg">POST /api/submissions</code> rejects everything. Adding and
+            importing leads here still works, and website submissions arrive in the Inbox rather
+            than on this page.
           </PageHeaderNote>
         )}
 

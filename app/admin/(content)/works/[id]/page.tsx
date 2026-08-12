@@ -12,10 +12,13 @@ export const dynamic = "force-dynamic";
 export default async function EditProjectPage(props: PageProps<"/admin/works/[id]">) {
   const { id } = await props.params;
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: { tags: { orderBy: { sortOrder: "asc" } } },
-  });
+  const [project, disciplines] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id },
+      include: { tags: { orderBy: { sortOrder: "asc" } } },
+    }),
+    prisma.discipline.findMany({ orderBy: { sortOrder: "asc" } }),
+  ]);
 
   if (!project) {
     notFound();
@@ -37,7 +40,9 @@ export default async function EditProjectPage(props: PageProps<"/admin/works/[id
           year: project.year,
           description: project.description,
           tags: project.tags.map((tag) => tag.label),
+          disciplineId: project.disciplineId,
         }}
+        disciplines={disciplines}
       />
 
       <DangerZone

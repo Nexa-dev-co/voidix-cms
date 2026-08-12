@@ -232,6 +232,9 @@ Five migrations, applied in order:
 | `20260729000001_attempts_and_settings` | Attempts, vocabulary, lead settings (+ RLS, seeded vocab) |
 | `20260729000002_pipeline_stages_and_custom_fields` | Pipeline stages, stage history, custom fields, follow-up dates; drops `status` (+ RLS, seeded stages) |
 | `20260730000000_lead_origin` | Where each lead came from, on `contacts` (no new table, so no new RLS) |
+| `20260812000000_about_and_careers` | The two document pages: About and Careers singletons, their ordered lists, career roles + bullets (+ RLS) |
+| `20260812000001_contact_footer_reshape` | Contact and Footer rebuilt to match the sections the site actually shipped; footer links become titled groups (+ RLS, incl. re-enabling it on the recreated `contact_section`) |
+| `20260812000002_inbox_applications_disciplines` | `disciplines` (seeded, linked from services and projects), `enquiry_form_content`, `submissions`, `career_applications` (+ RLS) |
 
 ### Content
 
@@ -242,16 +245,84 @@ projects              slug, sort_order, title(80), client(120), year(8), descrip
   project_tags          sort_order, label(40)          ordered chips
 faq_entries           sort_order, question(200)
   faq_paragraphs        sort_order, body               one <p> each
-contact_section       singleton — copy + every form string
-footer_content        singleton — tagline, copyright
-  footer_social_links   ordered  label + url
-  footer_legal_links    ordered  label + url
+contact_section       singleton — title(120), lead, brief_label(60), submit_label(40)
+footer_content        singleton — tagline(120), sign_off(160)
+  footer_link_groups    sort_order, title(40)
+    footer_links          sort_order, label(60), href(500)
+about_page            singleton — masthead, quote, notes, closing, cross-link
+  about_premise_paragraphs  sort_order, body           one <p> each
+  about_principles          sort_order, claim(80), backing
+  about_build_phases        sort_order, span(40), name(40), detail
+  about_instruments         sort_order, label(40), value(40)
+  about_stack_items         sort_order, label(40)      ordered chips
+careers_page          singleton — masthead, empty state, open application, form strings
+  careers_working_here      sort_order, claim(80), backing
+  careers_hiring_phases     sort_order, span(40), name(40), detail
+  careers_commitment_options sort_order, label(40)
+career_roles          slug, sort_order, title(100), location(60), commitment(60), brief_seed(200)
+  career_role_bullets   kind(OWNS|NEEDS|BONUS), sort_order, label
+disciplines           key UNIQUE(web|mobile|enterprise|ai), sort_order, label(60), brief_seed(300)
+  services.discipline_id  →   projects.discipline_id →
+enquiry_form_content  singleton — field labels, sending/sent/failed, {project} templates
 content_releases      version, payload(jsonb), note, published_by, revalidate_status
 ```
 
 Column widths are layout constraints, not padding — `name` sits in a four-across carousel row,
 `eyebrow` is one line. They live once in `FIELD_LIMITS` so the counter shown in the UI and the
 limit enforced on save cannot drift.
+
+**The document pages are singleton + standalone ordered tables**, the arrangement
+`footer_content` already uses. Services, Works and FAQ are each *one repeating thing*; a document
+page is a masthead plus several unrelated lists, and those lists have no parent row to hang off.
+
+**`career_role_bullets` uses a `kind` column where the footer's two link tables use a table
+split, and that is not an inconsistency.** The footer's social and legal lists render in
+different places, so splitting them cost nothing and a `kind` column would have duplicated the
+split. A role's three lists render in the same card, in the same shape, differing only by the
+heading above them — three identical tables would mean three identical models and three
+identical write paths.
+
+**`Claim` and `Phase` are shared shapes**, so About's principles and Careers' claims carry the
+same columns and the same `FIELD_LIMITS` entries. The site shares one type across both pages;
+two sets of limits would be two places for them to drift.
+
+**Footer links have no `is_external` column.** The site flags four of its nine links as opening
+in a new tab, and that flag is a *function of the href*: `http(s)` leaves the site, a
+root-relative path and a `mailto:` do not. Derived in `contentPayload` like the ordinals, because
+a stored copy could disagree with the URL sitting next to it and no editor could tell which was
+right. Verified to reproduce the site's hand-maintained array exactly.
+
+**`isSafeLinkUrl` allows `mailto:` and `tel:` as well as `http(s)` and root-relative paths**,
+because the contact address lives in the footer's `Direct` group rather than in a field of its
+own. Everything else is rejected — these hrefs become anchors on a public page, so an unchecked
+scheme is a stored XSS vector reachable by anyone who can log into this panel. `//evil.com` is
+rejected too: a protocol-relative URL is an off-site link wearing a path.
+
+### What the website sends
+
+```
+submissions          name, email (lowercased, NOT unique), company, message,
+                     source, ip_hash, user_agent, created_at,
+                     promoted_at + promoted_contact_id + promoted_by_id,
+                     dismissed_at
+career_applications  name, email, phone, why_you, work_link, cv_url,
+                     role_id → career_roles (SET NULL), role_title (snapshot),
+                     commitment, ip_hash, user_agent, created_at,
+                     reviewed_at + reviewed_by_id
+```
+
+**Neither is a lead.** `submissions` becomes one only through `promoteSubmission`;
+`career_applications` never does. Both are written by unauthenticated routes and both are
+admin-only — neither has an owner column, so `visibility.ts` has nothing to scope by and the role
+is the whole gate.
+
+**`submissions.email` is deliberately not unique**, unlike `contacts.email`. Deduplication is a
+decision about *people*; this table holds *messages*. One person enquiring three times is three
+submissions and, after promotion, one contact with three enquiries.
+
+**`career_applications.role_title` is a snapshot and `role_id` is `SET NULL`.** Closing a role is
+done by deleting it, and an application must still say what it was for a year later — the same
+rule `contact_attempts` follows for the channel and outcome vocabulary.
 
 ### Leads
 
@@ -329,7 +400,9 @@ delete any user, so every caller sits behind `requireAdmin()`.
 
 ### The one public endpoint
 
-`POST /api/leads` is the only route reachable without a session. It is exempted in
+`POST /api/submissions` and `POST /api/applications` are the only routes reachable without a
+session, and neither creates a lead — the first fills the Inbox, the second fills Applications.
+Both are exempted in
 `PUBLIC_PATHS` and authenticates itself:
 
 1. Constant-time shared-secret comparison (`x-voidix-secret`)
@@ -556,6 +629,65 @@ deliberately messy real-world file, not a clean one you wrote yourself.*
 A blank name fell back to the raw address, producing a contact literally called
 `julia@example.com`. Now derives a readable guess — "Julia" — and warns that it guessed.
 
+### Moving the intake off `contacts` would have silently disabled the rate limiter
+
+`isRateLimited` counted rows in `enquiries` matching the caller's IP hash, which was exactly
+right while the website form created a contact and an enquiry directly. When the form was moved
+to write to `submissions` instead, that count became permanently zero — every caller would have
+read as "0 submissions this hour" and the two public endpoints would have been effectively
+unlimited.
+
+Nothing about it looks broken. No error, no failing request, no log line; just a defence that
+stopped defending. It was caught by asking what *else* read the table the endpoint stopped
+writing to, rather than by testing the endpoint, which passed either way.
+
+Now counts `submissions` + `career_applications` against one shared budget — one budget because
+an attacker does not care which of two endpoints they flood, and two allowances would simply
+double what one address can send.
+
+*Lesson: when a write moves to a new table, the thing to check is not the writer. It is every
+reader that was counting on the old one.*
+
+### Contact and Footer were modelled for sections that did not exist, and both guessed wrong
+
+The two tables were designed ahead of the build, on the reasoning that having the copy ready
+would speed the sections up. When the sections actually landed, Contact was wrong in five places
+and Footer in two:
+
+| Modelled | Built |
+| --- | --- |
+| `title_line_1` + `title_line_2` | one `CONTACT_TITLE` string |
+| `eyebrow` | hardcoded in `ContactSection.tsx` — and written out twice |
+| `email_address` | a link inside the footer's `Direct` group |
+| three form labels, success + error | hardcoded in `EnquiryForm.tsx`; only `briefLabel` and `submitLabel` are props |
+| flat `social` + `legal` link lists | one array of **titled groups**, feeding two footers |
+
+Every wrong column would have become a field an editor could fill in that rendered nowhere —
+the precise failure this panel's own rules warn about. Reshaped in `20260812000001`.
+
+**It cost nothing only because it was caught early.** `contact_section`, `footer_content`, both
+link tables and `content_releases` were all empty, so the fix is a `DROP TABLE` and a rebuild.
+After one release the payload would have had to carry both shapes forever, since a release is
+append-only and is what the site reads.
+
+*Lesson: modelling copy ahead of the component that renders it is a guess, and it is a guess with
+a shelf life. Do it if the section is genuinely blocked on the data — but reconcile it against the
+real component the day it ships, while the tables are still empty.*
+
+### The application seeds lost the space the applicant types after
+
+`briefSeed` and `openApplicationSeed` are deliberately left mid-sentence — "…what I would want
+to own: " — so the applicant continues them in the form. Every string in the panel is normalised
+by `toPlainLine`, which trims; correct for all of them, and it ate that trailing space. The seed
+round-tripped as "…would want to own:" and the applicant's first word would have joined it.
+
+Caught by round-tripping the payload and printing the seed with a continuation appended, rather
+than by reading the stored value — the defect is invisible in a text field and in a diff.
+
+Fixed by making the space structural: `continuationSeed()` in `contentPayload.ts` adds it at
+publish time. *Lesson: never make an editor type an invisible character. If a value needs
+trailing whitespace to be correct, the code owes it, not the person.*
+
 ### `IDLE_IMPORT_STATE` was `undefined` on the client
 
 A `"use server"` module turns **every** export into a server-function reference, so a plain
@@ -567,7 +699,7 @@ it, so it only appeared at runtime. Constants moved to `lib/leads/importState.ts
 
 ### The proxy would have swallowed lead submissions
 
-Exempting `/api/leads` from the session guard collided with the existing "already logged in →
+Exempting the intake route from the session guard collided with the existing "already logged in →
 go to dashboard" redirect, which would have bounced submissions to `/admin` whenever the caller
 carried a session cookie — a 307 the caller reads as success. That redirect is now scoped to
 the login page only. *Caught before shipping, by re-reading the guard rather than trusting it.*
@@ -664,6 +796,18 @@ two tools fighting over the same values.
   "was this a win?" is answered by matching those snapshots against the labels currently marked
   WON. Storing the `kind` on each change alongside the label would fix it, and is the thing to add
   if renaming ever becomes common.
+- **A published career role cannot be applied to.** The site's application form collects name,
+  email, the work as a link or a PDF ≤ 5 MB, and "why you" — validates all of it, then prevents
+  its own submit, because no endpoint exists. Roles are editable and publishable here; the
+  receiving end is not built. It needs a multipart route that fails closed the way the intake
+  does, storage for CVs, retention rules, and an inbox that is **not** the leads pipeline — a
+  candidate is not a lead, and a CV is far more sensitive than an enquiry. Dropping a job
+  application silently is worse than dropping an enquiry, because the person is left believing
+  they applied.
+- **The document pages' numbered sections are not editable.** `ABOUT_SECTIONS` and
+  `CAREERS_SECTIONS` stay in the site's source, because each entry's `key` is simultaneously the
+  section's anchor id and its station on the orbit rail. Making them editable means the CMS owns
+  in-page navigation, and a renamed key breaks scroll targets with nothing to report it.
 - **Authenticated pages have not been exercised in a browser** by automated checks — they
   typecheck, build, and route correctly, and the data layer is verified directly (including
   the custom-field sort ordering and the RLS lockdown), but the rendered logged-in UI has only
@@ -742,6 +886,21 @@ behalf from taking the win off them.
 Colour is computed, not chosen. The ramp in `--chart-1..6` is *ordinal* — one hue, six steps,
 monotone lightness, validated against the `--card` surface these render on (every adjacent gap
 ≥ 0.06 OKLCH L, dimmest step still 3.5:1). It encodes position in the pipeline and nothing else.
+
+**The ramp was re-derived in amber when the site's accent stopped being cyan**, and the
+re-derivation is the argument for computing it. The obvious move — keep the cyan ramp's six
+lightness targets, swap the hue — *fails*: amber carries less relative luminance than cyan at
+equal OKLCH lightness, so the dimmest step measured 3.25:1 on the card instead of the 3.52:1 the
+cyan step gave, and quietly dropped under the floor. The floor was solved for instead (L 0.537,
+3.63:1) and the six steps redistributed evenly above it. Eyeballing the swap would have shipped a
+ramp whose last stage was unreadable on the surface it renders on.
+
+**`--warning` had to leave amber in the same change.** It was `#ffb24d`, which is exactly the
+site's `--heat-800` — fine beside a cyan accent, 14.5° away in hue from an amber one. Both are
+used as small text and hairlines (the unpublished-changes badge, the import wizard's "Already
+here" row, the near-limit counter), so two status colours became one. It moved to yellow at h100,
+44° clear. The lesson generalises: a brand colour moving does not only cost the tokens that
+*alias* it, it costs every token that was merely far enough away from the old one.
 
 Three rules fall out of that, and each one is a mistake avoided rather than a preference:
 

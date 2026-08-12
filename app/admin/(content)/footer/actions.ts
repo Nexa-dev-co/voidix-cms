@@ -16,41 +16,41 @@ export async function updateFooterAction(
 
   const parsed = footerSchema.safeParse({
     tagline: formData.get("tagline") ?? "",
-    copyright: formData.get("copyright") ?? "",
-    socialLinks: formData.get("socialLinks") ?? "",
-    legalLinks: formData.get("legalLinks") ?? "",
+    signOff: formData.get("signOff") ?? "",
+    linkGroups: formData.get("linkGroups") ?? "",
   });
 
   if (!parsed.success) {
     return formErrorFromZod(parsed.error);
   }
 
-  const { tagline, copyright, socialLinks, legalLinks } = parsed.data;
+  const { tagline, signOff, linkGroups } = parsed.data;
 
   await prisma.$transaction([
     prisma.footerContent.upsert({
       where: { id: SINGLETON_ROW_ID },
-      create: { id: SINGLETON_ROW_ID, tagline, copyright },
-      update: { tagline, copyright },
+      create: { id: SINGLETON_ROW_ID, tagline, signOff },
+      update: { tagline, signOff },
     }),
-    // Links carry no identity worth preserving, so the set is replaced rather than diffed —
-    // same reasoning as the capability and tag chips.
-    prisma.footerSocialLink.deleteMany({}),
-    prisma.footerSocialLink.createMany({
-      data: socialLinks.map((link, index) => ({
-        sortOrder: index,
-        label: link.label,
-        url: link.url,
-      })),
-    }),
-    prisma.footerLegalLink.deleteMany({}),
-    prisma.footerLegalLink.createMany({
-      data: legalLinks.map((link, index) => ({
-        sortOrder: index,
-        label: link.label,
-        url: link.url,
-      })),
-    }),
+    // Groups and their links carry no identity worth preserving, so the whole set is replaced
+    // rather than diffed — same reasoning as the capability and tag chips. The links go with
+    // their group via `onDelete: Cascade`, which is why only the groups are deleted here.
+    prisma.footerLinkGroup.deleteMany({}),
+    ...linkGroups.map((group, groupIndex) =>
+      prisma.footerLinkGroup.create({
+        data: {
+          sortOrder: groupIndex,
+          title: group.title,
+          links: {
+            create: group.links.map((link, linkIndex) => ({
+              sortOrder: linkIndex,
+              label: link.label,
+              href: link.href,
+            })),
+          },
+        },
+      }),
+    ),
   ]);
 
   revalidatePath("/admin");

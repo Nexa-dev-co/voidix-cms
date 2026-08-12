@@ -7,10 +7,19 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # voidix-cms
 
 Content control panel for the voidix site (`../orbix-dev`, repo `Nexa-dev-co/orbix-dev`). It
-edits **text only** — five sections, Services / Works / FAQ / Contact / Footer — plus a leads
-inbox. See `README.md` for what it deliberately cannot do and why.
+edits **text only** — five homepage sections, Services / Works / FAQ / Contact / Footer, plus the
+two document pages, About and Careers — and a leads inbox. See `README.md` for what it
+deliberately cannot do and why.
 
-Contact and Footer do not exist in the site yet; their copy is stored here ahead of the build.
+All seven now exist on the site. `careersContent.ts` names this panel as where its roles are
+meant to come from.
+
+**Contact and Footer were designed before their sections were built, and both guessed wrong.**
+Reshaped in `20260812000001` once the real sections landed: Contact lost a two-line title (the
+site renders one string), an eyebrow, a standalone email address and six form strings; Footer's
+flat social/legal split became titled groups. Nothing was saved or published yet, so it cost
+nothing — which is the whole reason to do it the moment the divergence is visible rather than
+after the first release. **Do not model a section this panel cannot yet read.**
 
 **`docs/PROJECT.md` records why the system is shaped the way it is** — the decisions, the
 defects already hit and their causes, and the invariants worth protecting. Read it before any
@@ -38,11 +47,11 @@ Check before writing, don't assume:
   kebab-case; rename after adding.
 
   Two of its semantic names mean the opposite of what they mean here: `--accent` is voidix's
-  cyan but shadcn's neutral *hover surface*, and `--muted` is faded *text* here but a *surface*
+  amber but shadcn's neutral *hover surface*, and `--muted` is faded *text* here but a *surface*
   there. Aliasing cannot satisfy both readings of one token, so those usages were rewritten to
   `bg-card` inside the primitives. **Re-running `shadcn add` overwrites the file and brings
   `bg-accent` / `bg-muted` / `text-accent-foreground` back with it** — sweep them again, or
-  dropdown rows will hover solid cyan. Everything else is aliased in `@theme inline`; see the
+  dropdown rows will hover solid amber. Everything else is aliased in `@theme inline`; see the
   comment there. Note also that `Dialog` imports `@/components/ui/button` lowercase, which
   resolves to the project's own `Button` on a case-insensitive filesystem and then fails on its
   `variant="outline"`.
@@ -55,15 +64,75 @@ one append-only `content_releases` row shaped exactly like the site's TypeScript
 mutate an existing release; publish writes a new version. The site (once wired) reads the
 newest release, never the draft tables.
 
+**One footer list feeds two footers.** `footer_link_groups` + `footer_links` mirror the site's
+`CONTACT_FOOTER_GROUPS`, which the homepage's contact section and the document pages both render
+— deliberately, so a changed handle cannot land in one and not the other. The two have very
+different space budgets, so a longer label wants checking on a 360px phone, not just on `/about`.
+There is no `is_external` column: it is derived from the href in `contentPayload`, because a
+stored flag could disagree with the URL beside it.
+
+**A document page owns its copy but not its structure.** About and Careers are a singleton for
+the prose plus standalone ordered tables for their lists — the arrangement `FooterContent`
+already uses. What the panel deliberately does **not** own is the numbered section list
+(`ABOUT_SECTIONS` / `CAREERS_SECTIONS` on the site): each entry's `key` is both the section's
+anchor id and the station the orbit rail scrolls to, so it is structure, and an editor renaming
+one would break in-page navigation with nothing to catch it.
+
+**A continuation seed carries a trailing space, and the payload adds it.** `briefSeed` and
+`openApplicationSeed` are left mid-sentence for the applicant to finish. Every string here is
+trimmed on save by `toPlainLine`, which is right for all of them and would eat that space, so
+`continuationSeed()` in `contentPayload.ts` puts it back at publish time. Never ask an editor to
+type an invisible character.
+
+**Career roles are never seeded.** The four openings in the site's source are invented
+placeholders, and unlike a placeholder project a job posting is something a person can waste an
+afternoon on. An empty list is the honest default — the careers page renders its own empty line
+and is built to stand in that state.
+
 **Every Server Action re-checks auth.** `requireUser()` at the top of each one. The proxy
 guards page routes, but Server Actions are reachable by direct POST and do not go through it.
 
-**`/api/leads` is the only unauthenticated route.** It is exempted in `PUBLIC_PATHS` and does
-its own checks in `lib/leads/intake.ts` — secret, origin, honeypot, rate limit — and **fails
-closed** when unconfigured. Anything added to `PUBLIC_PATHS` takes on the same obligation.
+**`/api/submissions` and `/api/applications` are the only unauthenticated routes.** Both are
+exempted in `PUBLIC_PATHS` and both go through `lib/leads/intake.ts` — secret, origin, honeypot,
+rate limit — and **fail closed** when unconfigured. Anything added to `PUBLIC_PATHS` takes on the
+same obligation. (`/api/leads` was renamed to `/api/submissions` when it stopped creating leads.)
+
+**A website submission is not a lead until somebody says so.** The enquiry form writes one row to
+`submissions` and stops. `promoteSubmission` is the *only* path from there to `contacts`, and it
+is the fourth intake route — it owns the deduplication, the auto-assignment and `originColumns`
+that used to sit in the endpoint. The point is that spam, tests and "hi" never reach the
+pipeline, the counts or the reports, so they are deleted from a table nothing else reads instead
+of filtered out of one everything reads. Promoting a known email appends an `Enquiry` to that
+person; it never creates a second contact. Promoting twice is a no-op.
+
+**⚠ The rate limiter counts `submissions` + `career_applications`, not `enquiries`.** It counted
+enquiries when the form created one directly. It no longer does, so counting them would leave the
+limiter reading zero forever and the public endpoints effectively unlimited — a rate limit that
+silently stops counting is worse than none, because nothing looks broken. Both tables share one
+budget: an attacker does not care which one they flood.
+
+**An application is never a lead.** `career_applications` has no path to `contacts` at all — a
+candidate is not a prospect, and a CV is far more sensitive than an enquiry. `role_title` is a
+snapshot because closing a role means *deleting* it, and the application must still say what it
+was for. **No file ever reaches this app**: the site uploads the CV to UploadThing and sends the
+resulting URL, so deleting an application removes our link, not the file.
+
+**Both intake tables are admin-only, and the reason is structural.** Neither has an owner column,
+so `visibility.ts` has nothing to scope by — the role is the whole gate.
 
 **Leads are not content.** They never enter a release, never get published, and are deleted
 for real rather than flagged. Raw IPs are never stored, only a salted hash.
+
+**One enquiry form, six places.** The services deck, the works field, the FAQ hologram, the
+contact section, `/about` and `/careers` all render the site's single `EnquiryForm`. Its shared
+strings live in `enquiry_form_content`, not on any one section — putting them on Contact would
+say they were Contact's, and the next editor would wonder why changing them moved the works form
+too. What a section genuinely overrides stays with that section (`contact_section.brief_label`,
+`careers_page.application_brief_label`).
+
+**`disciplines` is one vocabulary with three consumers.** The fleet sells a discipline, a project
+is *of* one, and the enquiry form arrives knowing which. `key` is what the site binds to and is
+not editable — renaming it would silently unbind every service and project from its CTA.
 
 **The leads table pages in the database.** `lib/leads/leadQuery.ts` is the only place a page of
 leads is fetched; TanStack runs in manual mode and is the rendering model, not the data engine.

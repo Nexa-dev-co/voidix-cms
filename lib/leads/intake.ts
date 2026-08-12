@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
+import { isEqualInConstantTime } from "@/lib/sharedSecret";
 
 const DEFAULT_RATE_LIMIT_PER_HOUR = 20;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -111,16 +112,22 @@ function hashClientIp(request: Request): string | null {
 }
 
 /**
- * Counts submissions from the same hashed IP inside the window.
+ * Counts everything the public routes have written from the same hashed IP inside the window.
  *
- * Counts *enquiries*, not contacts — one person submitting the form fifty times creates one
- * contact and fifty enquiries, so counting contacts would let exactly that flood through
- * unnoticed.
+ * ⚠ COUNTS `submissions` AND `career_applications`, not `enquiries`. It used to count enquiries,
+ * which was right when the website form created a contact and an enquiry directly. It no longer
+ * does — the form writes to `submissions` and nothing else — so counting enquiries would have
+ * left the limiter reading zero forever and the endpoint effectively unlimited. A rate limit
+ * that silently stops counting is worse than none, because nothing looks broken.
  *
- * Counting rows rather than keeping a separate counter table means no extra schema and no
- * state to expire, and because every accepted submission writes a row, a flood is caught by
- * the same mechanism that records it. The tradeoff is that rejected attempts don't count
- * toward the limit; they also don't write to the database, so they cost far less.
+ * Both tables are counted against one budget on purpose: they share a guard, an attacker does
+ * not care which of the two they flood, and two separate allowances would simply double what one
+ * address can send.
+ *
+ * Counting rows rather than keeping a counter table means no extra schema and no state to
+ * expire, and because every accepted request writes a row, a flood is caught by the same
+ * mechanism that records it. The tradeoff is that rejected attempts don't count toward the
+ * limit; they also don't write to the database, so they cost far less.
  */
 async function isRateLimited(ipHash: string): Promise<boolean> {
   const limit = Number(process.env.LEADS_RATE_LIMIT_PER_HOUR ?? DEFAULT_RATE_LIMIT_PER_HOUR);
@@ -129,28 +136,12 @@ async function isRateLimited(ipHash: string): Promise<boolean> {
     return false;
   }
 
-  const recentCount = await prisma.enquiry.count({
-    where: {
-      ipHash,
-      createdAt: { gte: new Date(Date.now() - RATE_LIMIT_WINDOW_MS) },
-    },
-  });
+  const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
 
-  return recentCount >= limit;
-}
+  const [submissionCount, applicationCount] = await Promise.all([
+    prisma.submission.count({ where: { ipHash, createdAt: { gte: since } } }),
+    prisma.careerApplication.count({ where: { ipHash, createdAt: { gte: since } } }),
+  ]);
 
-/**
- * Length-independent comparison, so response timing can't be used to guess the secret one
- * character at a time.
- */
-function isEqualInConstantTime(left: string, right: string): boolean {
-  const leftHash = createHash("sha256").update(left).digest();
-  const rightHash = createHash("sha256").update(right).digest();
-
-  let difference = 0;
-  for (let index = 0; index < leftHash.length; index += 1) {
-    difference |= leftHash[index] ^ rightHash[index];
-  }
-
-  return difference === 0;
+  return submissionCount + applicationCount >= limit;
 }

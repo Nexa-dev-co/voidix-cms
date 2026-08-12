@@ -12,12 +12,32 @@
   --bg: #060606;
   --fg: #ebe8e0;
   --muted: rgba(235, 232, 224, 0.38);
-  --accent: #00e5ff;
-  --border: rgba(235, 232, 224, 0.08);
+  /*
+   * The accent IS the sun's light. This is the site's `--heat-600`, the anchor stop of its
+   * amber heat ramp, which replaced the electric cyan the panel used to carry. The site's own
+   * note on it: the cyan was held deliberately APART from the star so the chrome read as the
+   * studio and the hero read as the thing being built — that split is gone, and there is now
+   * one accent.
+   *
+   * The site aliases it (`--heat-600` → `--sun-accent` → `--accent`) because eleven other
+   * stops hang off the same ramp. Only this one stop reaches the panel, so it is copied
+   * flat — but it is the ramp's anchor, so if the site retunes `--heat-600`, this follows.
+   */
+  --accent: #ff8a1a;
+  /*
+   * Hairlines carry a breath of the star rather than neutral grey, so the panel's chrome reads
+   * as LIT rather than as UI drawn on top of it — the site's reasoning, mirrored.
+   *
+   * The alpha is 0.10 rather than the old 0.08 because amber is less luminous than the cream
+   * it replaced, and what is held steady is the WEIGHT, not the number. This is the site's own
+   * compensated value, copied verbatim.
+   */
+  --border: rgba(255, 138, 26, 0.1);
   --card: #0d0d0d;
 
   /* Panel-only additions — the site has no forms, so it never needed these. */
-  --border-strong: rgba(235, 232, 224, 0.16);
+  /* Twice `--border`'s alpha, the ratio it has always had; warmed by the same compensation. */
+  --border-strong: rgba(255, 138, 26, 0.2);
   --field: #0a0a0a;
   /*
    * One step above the page, for a row under the cursor.
@@ -29,7 +49,20 @@
    */
   --surface-hover: #0a0a0a;
   --danger: #ff6b5e;
-  --warning: #ffb24d;
+  /*
+   * Yellow, not amber — and that is forced, not a preference.
+   *
+   * This was `#ffb24d`, which is exactly the site's `--heat-800`. Against a cyan accent that
+   * was fine; against the amber one it sits 14.5° away in OKLCH hue, and `--warning` and
+   * `--accent` are both used as small text and hairlines (the unpublished-changes badge, the
+   * import wizard's "Already here" row, the near-limit character counter). Two status colours
+   * a reader cannot tell apart are worse than one.
+   *
+   * Moved to h100 — 44° clear of the accent, 73° of `--danger`, 59° of `--success` — with
+   * chroma pulled to the 0.15 the other status colours sit at rather than to the gamut edge,
+   * so it reads as a member of the set instead of a highlighter.
+   */
+  --warning: #e8d34c;
   --success: #3ddc97;
 
   /*
@@ -43,18 +76,25 @@
    * shows.
    *
    * Computed against the `--card` surface these render on, not chosen by eye: monotone
-   * lightness, every adjacent gap ≥ 0.06 OKLCH L, single hue (7° spread), and the dimmest step
+   * lightness, every adjacent gap ≥ 0.06 OKLCH L, single hue (1.2° spread), and the dimmest step
    * still at 3.5:1 against the card. Won and Lost are deliberately absent — they mean good and
    * bad, so they wear `--success` and `--danger`, and a status colour never doubles as a series.
    *
+   * Re-derived in amber when the accent stopped being cyan, at the accent's own hue (55.9°) and
+   * on the cyan ramp's original lightness targets, so only the hue moved and the ramp behaves
+   * exactly as it did. One target could NOT be kept: amber carries less relative luminance than
+   * cyan at equal OKLCH lightness, so the old floor of L 0.511 measured 3.25:1 on the card and
+   * failed. The floor was solved for instead (L 0.537, 3.63:1) and the six steps redistributed
+   * evenly above it — which is the entire reason this is computed and not picked.
+   *
    * If you change these, re-run the check rather than eyeballing the result.
    */
-  --chart-1: #bdf5ff;
-  --chart-2: #63e2f9;
-  --chart-3: #1fcfe9;
-  --chart-4: #00b0cf;
-  --chart-5: #0091ab;
-  --chart-6: #007387;
+  --chart-1: #ffe3d1;
+  --chart-2: #fac29c;
+  --chart-3: #fd9a4e;
+  --chart-4: #ea7b00;
+  --chart-5: #c76800;
+  --chart-6: #a65500;
 }
 
 @theme inline {
@@ -89,11 +129,11 @@
    * Two of the names could NOT be aliased, because the same token means different things in
    * the two vocabularies:
    *
-   *   --accent   voidix: the cyan highlight     shadcn: a neutral hover SURFACE
+   *   --accent   voidix: the amber highlight    shadcn: a neutral hover SURFACE
    *   --muted    voidix: faded body TEXT        shadcn: a neutral surface
    *
    * Aliasing either one would break the other reading — `text-muted` would stop being legible
-   * text, and every dropdown row would hover solid cyan. Those usages were rewritten to
+   * text, and every dropdown row would hover solid amber. Those usages were rewritten to
    * `bg-card` inside the primitives instead. If you re-run `shadcn add`, it overwrites the file
    * and brings `bg-accent` / `bg-muted` / `text-accent-foreground` back with it: sweep them
    * again, or the panel will tell you loudly.

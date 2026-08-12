@@ -25,6 +25,7 @@ function parseProjectForm(formData: FormData) {
     year: formData.get("year") ?? "",
     description: formData.get("description") ?? "",
     tags: formData.get("tags") ?? "",
+    disciplineId: formData.get("disciplineId") ?? "",
   });
 }
 
@@ -40,7 +41,7 @@ export async function createProjectAction(
     return formErrorFromZod(parsed.error);
   }
 
-  const { title, client, year, description, tags } = parsed.data;
+  const { title, client, year, description, tags, disciplineId } = parsed.data;
 
   const existingSlugs = await prisma.project.findMany({ select: { slug: true } });
   const slug = makeSlugUnique(
@@ -59,6 +60,7 @@ export async function createProjectAction(
       client,
       year,
       description,
+      disciplineId,
       tags: {
         create: tags.map((label, index) => ({ sortOrder: index, label })),
       },
@@ -87,7 +89,7 @@ export async function updateProjectAction(
     return formErrorFromZod(parsed.error);
   }
 
-  const { title, client, year, description, tags } = parsed.data;
+  const { title, client, year, description, tags, disciplineId } = parsed.data;
 
   const existing = await prisma.project.findUnique({ where: { id }, select: { id: true } });
 
@@ -98,7 +100,7 @@ export async function updateProjectAction(
   await prisma.$transaction([
     prisma.project.update({
       where: { id },
-      data: { title, client, year, description },
+      data: { title, client, year, description, disciplineId },
     }),
     prisma.projectTag.deleteMany({ where: { projectId: id } }),
     prisma.projectTag.createMany({

@@ -23,6 +23,13 @@ const SECTIONS = [
   { href: "/admin/faq", label: "FAQ", note: "Add, edit, reorder, remove." },
   { href: "/admin/contact", label: "Contact", note: "Section copy and every form string." },
   { href: "/admin/footer", label: "Footer", note: "Tagline, copyright and link lists." },
+  { href: "/admin/about", label: "About", note: "The whole /about document." },
+  { href: "/admin/careers", label: "Careers", note: "Open roles, and the copy around them." },
+  {
+    href: "/admin/enquiry-form",
+    label: "Enquiry form",
+    note: "One form, six sections. Labels, messages, subjects.",
+  },
 ] as const;
 
 export default async function AdminDashboardPage() {
@@ -124,7 +131,14 @@ async function AdminSections() {
   const [draftPayload, releasePayload, counts, latestRelease] = await Promise.all([
     buildContentPayload(),
     getLatestReleasePayload(),
-    Promise.all([prisma.service.count(), prisma.project.count(), prisma.faqEntry.count()]),
+    Promise.all([
+      prisma.service.count(),
+      prisma.project.count(),
+      prisma.faqEntry.count(),
+      prisma.careerRole.count(),
+      prisma.submission.count({ where: { promotedAt: null, dismissedAt: null } }),
+      prisma.careerApplication.count({ where: { reviewedAt: null } }),
+    ]),
     prisma.contentRelease.findFirst({
       orderBy: { version: "desc" },
       select: { version: true, publishedAt: true, publishedBy: true },
@@ -132,20 +146,71 @@ async function AdminSections() {
   ]);
 
   const draftStatus = compareWithRelease(draftPayload, releasePayload);
-  const [serviceCount, projectCount, faqCount] = counts;
+  const [serviceCount, projectCount, faqCount, roleCount, waitingCount, unreadApplicationCount] =
+    counts;
 
-  // Contact and Footer are single records, so a row count would only ever read "1" and tells
-  // an editor nothing. They show a saved/not-saved state instead.
+  // Contact, Footer and About are single records, so a row count would only ever read "1" and
+  // tells an editor nothing. They show a saved/not-saved state instead. Careers has both, and
+  // the countable half is the one worth surfacing — "0 roles" on a saved page is a real state,
+  // not a missing one.
   const sectionCounts: Record<string, string> = {
     "/admin/services": String(serviceCount),
     "/admin/works": String(projectCount),
     "/admin/faq": String(faqCount),
     "/admin/contact": draftPayload.contact ? "saved" : "not set up",
     "/admin/footer": draftPayload.footer ? "saved" : "not set up",
+    "/admin/about": draftPayload.about ? "saved" : "not set up",
+    "/admin/careers": draftPayload.careers ? String(roleCount) : "not set up",
+    "/admin/enquiry-form": draftPayload.enquiryForm ? "saved" : "not set up",
   };
 
   return (
     <>
+      {/* Above the copy sections on purpose: unvetted things that arrived are work waiting on
+          somebody, where site copy is work you go looking for. Both rows are hidden when there
+          is nothing in them — an inbox that always says "0" stops being read. */}
+      {(waitingCount > 0 || unreadApplicationCount > 0) && (
+        <section>
+          <h2 className="eyebrow mb-3">Waiting for you</h2>
+          <div className="flex flex-col divide-y divide-border border-y border-border">
+            {waitingCount > 0 && (
+              <Link
+                href="/admin/inbox"
+                className="group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50"
+              >
+                <div>
+                  <p className="text-sm text-fg transition-colors group-hover:text-accent">
+                    {waitingCount} website submission{waitingCount === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Not leads yet — nothing enters the pipeline until you add it.
+                  </p>
+                </div>
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent" />
+              </Link>
+            )}
+
+            {unreadApplicationCount > 0 && (
+              <Link
+                href="/admin/applications"
+                className="group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50"
+              >
+                <div>
+                  <p className="text-sm text-fg transition-colors group-hover:text-accent">
+                    {unreadApplicationCount} unread application
+                    {unreadApplicationCount === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    People applying through the careers page.
+                  </p>
+                </div>
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent" />
+              </Link>
+            )}
+          </div>
+        </section>
+      )}
+
       <PublishPanel draftStatus={draftStatus} />
 
       <section>

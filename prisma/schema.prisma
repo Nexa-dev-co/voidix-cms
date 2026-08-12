@@ -23,6 +23,69 @@ datasource db {
   provider = "postgresql"
 }
 
+/// A discipline the studio sells, and the one vocabulary three places share.
+///
+/// The fleet sells a discipline, the works field shows a project OF one, and the enquiry form
+/// arrives already knowing which one the visitor came from. The site keeps all three in step by
+/// keying off a single `DisciplineId`; this table is that list.
+///
+/// ⚠ `label` is deliberately PLAINSPOKEN — "Web Development", not the deck's "Web Experiences".
+/// The service name is the brand talking; this is the line a visitor would write in an email,
+/// and it is what lands in the form's subject. Both exist on purpose.
+///
+/// `key` is what the site keys off and is never shown to a visitor, so it is not editable — a
+/// renamed key would silently unbind every service and project from its CTA.
+model Discipline {
+  id        String @id @default(uuid()) @db.Uuid
+  key       String @unique @db.VarChar(32)
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(60)
+  /// Seeds the form's long field. In the VISITOR's voice and left mid-sentence — the trailing
+  /// space is added on publish by `continuationSeed`, not typed here.
+  briefSeed String @map("brief_seed") @db.VarChar(300)
+
+  services Service[]
+  projects Project[]
+
+  @@index([sortOrder])
+  @@map("disciplines")
+}
+
+/// Every string the site's shared enquiry form renders, other than the ones a section overrides.
+///
+/// ⚠ ONE FORM, SIX PLACES. `EnquiryForm` on the site is rendered by the services deck, the works
+/// field, the FAQ hologram, the contact section, `/about` and `/careers`. These strings are the
+/// ones common to all of them, which is why they live here rather than on the contact section —
+/// putting them there would say they were contact's, and the next editor would wonder why
+/// changing them moved the works form too.
+///
+/// What a section overrides stays with that section: `contact_section.brief_label` and
+/// `careers_page.application_brief_label` name the long field differently because those two
+/// forms ask a different question.
+model EnquiryFormContent {
+  id String @id
+
+  nameLabel  String @map("name_label") @db.VarChar(60)
+  emailLabel String @map("email_label") @db.VarChar(60)
+  phoneLabel String @map("phone_label") @db.VarChar(60)
+
+  /// While the request is in flight. Replaces the button's own label, so it reads as the same
+  /// control doing something rather than a different one appearing.
+  sendingLabel String @map("sending_label") @db.VarChar(40)
+  sentMessage  String @map("sent_message") @db.VarChar(200)
+  errorMessage String @map("error_message") @db.VarChar(200)
+
+  /// How the works field's CTA names the project the visitor is pointing at. Both must contain
+  /// `{project}`; the schema rejects them if they don't, because a template that silently drops
+  /// its only variable produces copy that reads as finished and says nothing.
+  referenceSubjectSuffix String @map("reference_subject_suffix") @db.VarChar(60)
+  referenceBriefPrefix   String @map("reference_brief_prefix") @db.VarChar(120)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("enquiry_form_content")
+}
+
 /// A service = one vessel on the ServicesDeck carousel. Text only.
 ///
 /// Deliberately has no create/delete path in the admin UI: a service is bound to a .glb
@@ -42,6 +105,10 @@ model Service {
   /// One-line poetic kicker above the description.
   eyebrow     String   @db.VarChar(120)
   description String
+  /// What this craft's CTA enquires about. Separate from `name` on purpose — the name is the
+  /// brand talking, the discipline is the plain word that lands in the form's subject.
+  disciplineId String   @map("discipline_id") @db.Uuid
+  discipline   Discipline @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -79,6 +146,10 @@ model Project {
   /// A string, not an integer — the site renders it raw and allows things like "2026".
   year        String   @db.VarChar(8)
   description String
+  /// The kind of work this was, from the same vocabulary the fleet sells. Renders as the
+  /// project's type key and decides what its CTA enquires about.
+  disciplineId String     @map("discipline_id") @db.Uuid
+  discipline   Discipline @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -130,72 +201,439 @@ model FaqParagraph {
   @@map("faq_paragraphs")
 }
 
-/// The Contact section's copy, including the strings the form itself renders.
+/// The Contact section's copy.
 ///
 /// A singleton — there is only ever one contact section, so it uses a fixed primary key
 /// (`SINGLETON_ROW_ID`) and is written with `upsert` rather than create/update. That is
 /// simpler and safer than a table that could accidentally hold two rows and leave the site
 /// picking one arbitrarily.
 ///
-/// The site has no Contact section yet; the navbar links to `#contact` and nothing is there.
-/// This is seeded with placeholder copy in the voidix voice, the same way worksProjects.ts
-/// ships placeholders today.
+/// ⚠ RESHAPED ONCE THE SITE'S CONTACT SECTION ACTUALLY EXISTED, and the shape it lost is worth
+/// remembering. This table was designed before the section was built and guessed wrong in five
+/// places: a two-line title (the site renders ONE string), an eyebrow (hardcoded in JSX, and in
+/// two places), a standalone email address (it is a link inside the footer's `Direct` group),
+/// three form field labels and a success/error pair (all hardcoded in `EnquiryForm.tsx`).
+/// Every one of those would have been a field an editor could fill in that rendered nowhere.
+/// What is left is exactly what `contactContent.ts` exports plus the two real form props.
 model ContactSection {
   id String @id
 
-  eyebrow      String @db.VarChar(120)
-  titleLine1   String @map("title_line_1") @db.VarChar(60)
-  titleLine2   String @map("title_line_2") @db.VarChar(60)
-  description  String
-  /// The address shown to visitors. Not where leads are delivered — that's the site's job.
-  emailAddress String @map("email_address") @db.VarChar(320)
+  /// ⚠ One string. The site's `CONTACT_TITLE` is not split across lines the way the section
+  /// titles elsewhere are — do not "restore" the two-column version.
+  title String @db.VarChar(120)
+  lead  String
 
-  formNameLabel    String @map("form_name_label") @db.VarChar(60)
-  formEmailLabel   String @map("form_email_label") @db.VarChar(60)
-  formMessageLabel String @map("form_message_label") @db.VarChar(60)
-  submitLabel      String @map("submit_label") @db.VarChar(40)
-  successMessage   String @map("success_message") @db.VarChar(200)
-  errorMessage     String @map("error_message") @db.VarChar(200)
+  /// Names the form's long field. A real prop on EnquiryForm, so the site can read it today.
+  briefLabel  String @map("brief_label") @db.VarChar(60)
+  submitLabel String @map("submit_label") @db.VarChar(40)
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("contact_section")
 }
 
-/// Footer sign-off copy. Singleton, same as ContactSection. Links live in their own ordered
-/// tables so they can be reordered without rewriting a blob.
+/// Footer sign-off copy. Singleton, same as ContactSection.
+///
+/// ⚠ Neither string is read by the site yet — both are hardcoded in `PageFooter.tsx`. They are
+/// carried here because they are plainly copy and only their source has to move; the panel says
+/// so on the page rather than letting an editor believe an edit here changes the site.
 model FooterContent {
   id String @id
 
-  tagline   String @db.VarChar(120)
-  copyright String @db.VarChar(120)
+  /// The line under the wordmark ("Software with its own gravity").
+  tagline String @db.VarChar(120)
+  /// The line across the bottom. Not a copyright notice — the site's is a statement of what the
+  /// studio is, with no year in it, so nothing here needs editing every January.
+  signOff String @map("sign_off") @db.VarChar(160)
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("footer_content")
 }
 
-/// Social destinations in the footer. Ordered.
-model FooterSocialLink {
+/// A titled column of footer links.
+///
+/// ⚠ ONE LIST FEEDS TWO FOOTERS. The site's `CONTACT_FOOTER_GROUPS` is rendered both by the
+/// homepage's contact section and by `PageFooter` on the document routes — deliberately, so a
+/// changed handle cannot land in one footer and not the other. The consequence for an editor is
+/// that the two have very different space budgets: the contact footer shares one pinned viewport
+/// with a form and a black hole, and the site has a whole `@media (max-width: 30em)` block about
+/// the ~150px it once overran by. A change here wants checking on a 360px phone.
+///
+/// This replaced the old `footer_social_links` / `footer_legal_links` split, which could not
+/// express a group title at all.
+model FooterLinkGroup {
   id        String @id @default(uuid()) @db.Uuid
   sortOrder Int    @map("sort_order")
-  label     String @db.VarChar(40)
-  url       String @db.VarChar(500)
+  /// The small uppercase kicker over the column.
+  title     String @db.VarChar(40)
+
+  links FooterLink[]
 
   @@index([sortOrder])
-  @@map("footer_social_links")
+  @@map("footer_link_groups")
 }
 
-/// Privacy / terms style links in the footer. Ordered. Separate from social because the two
-/// render in different places and a single list would need a "kind" column doing the same job.
-model FooterLegalLink {
+/// One link inside a group. Ordered within its group.
+///
+/// There is no `is_external` column: the site's flag is derivable from the href, and a stored
+/// copy could disagree with it. `contentPayload` computes it — an `http(s)` destination opens in
+/// a new tab, a root-relative path or a `mailto:` does not, which is exactly what the site's
+/// hand-maintained array says today.
+model FooterLink {
+  id        String @id @default(uuid()) @db.Uuid
+  groupId   String @map("group_id") @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(60)
+  href      String @db.VarChar(500)
+
+  group FooterLinkGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, sortOrder])
+  @@map("footer_links")
+}
+
+// ─── The document pages: /about and /careers ────────────────────────────────────────────────
+//
+// These two are shaped differently from the five sections above, and the difference is worth
+// stating once. Services, Works and FAQ are each ONE repeating thing. A document page is a
+// masthead plus several unrelated ordered lists, so each is a singleton for the prose with
+// standalone ordered tables beside it — the same arrangement FooterContent already uses with
+// its two link tables, and for the same reason: the lists have no parent row to hang off.
+//
+// ⚠ WHAT IS DELIBERATELY NOT HERE: the numbered section list (the site's ABOUT_SECTIONS /
+// CAREERS_SECTIONS). Each entry's `key` is both the section's anchor id and the station the
+// orbit rail scrolls to, so it is structure, not copy — an editor renaming one would break
+// in-page navigation with nothing to catch it. It stays in the site's source.
+
+/// The `/about` document's prose. Singleton, same reasoning as ContactSection.
+model AboutPage {
+  id String @id
+
+  eyebrow String @db.VarChar(60)
+  /// Two lines, not one string with a break in it — see ContactSection's title columns.
+  titleLine1 String @map("title_line_1") @db.VarChar(60)
+  titleLine2 String @map("title_line_2") @db.VarChar(60)
+  lead       String
+
+  /// The pull quote closing the premise section.
+  premiseQuote String @map("premise_quote")
+
+  instrumentsNote String @map("instruments_note")
+  stackNote       String @map("stack_note")
+
+  closingTitle String @map("closing_title") @db.VarChar(80)
+  closingLead  String @map("closing_lead")
+
+  /// The cross-link to /careers. Both document pages carry one to the other.
+  careersInvite String @map("careers_invite") @db.VarChar(120)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("about_page")
+}
+
+/// Paragraphs of the premise section. One row per `<p>`, like FaqParagraph.
+model AboutPremiseParagraph {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  body      String
+
+  @@index([sortOrder])
+  @@map("about_premise_paragraphs")
+}
+
+/// The studio's principles. A `Claim` on the site: an assertion and the thing backing it up.
+model AboutPrinciple {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  claim     String @db.VarChar(80)
+  backing   String
+
+  @@index([sortOrder])
+  @@map("about_principles")
+}
+
+/// How a build runs, as a `Phase` on the site: a span of time, its name, what happens in it.
+model AboutBuildPhase {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  span      String @db.VarChar(40)
+  name      String @db.VarChar(40)
+  detail    String
+
+  @@index([sortOrder])
+  @@map("about_build_phases")
+}
+
+/// The instruments.
+///
+/// ⚠ These are COMMITMENTS, not measurements, and the site's aboutContent.ts is arranged around
+/// keeping them that way — "37 products shipped" is precisely the sentence that file avoids.
+/// Nothing here can enforce that; it is a rule for whoever edits them.
+model AboutInstrument {
   id        String @id @default(uuid()) @db.Uuid
   sortOrder Int    @map("sort_order")
   label     String @db.VarChar(40)
-  url       String @db.VarChar(500)
+  value     String @db.VarChar(40)
 
   @@index([sortOrder])
-  @@map("footer_legal_links")
+  @@map("about_instruments")
+}
+
+/// What the studio works in. Ordered chips.
+model AboutStackItem {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(40)
+
+  @@index([sortOrder])
+  @@map("about_stack_items")
+}
+
+/// The `/careers` document's prose, including the strings its application form renders.
+model CareersPage {
+  id String @id
+
+  eyebrow    String @db.VarChar(60)
+  titleLine1 String @map("title_line_1") @db.VarChar(60)
+  titleLine2 String @map("title_line_2") @db.VarChar(60)
+  lead       String
+
+  /// What the roles section says when no role is open. The page has to stand in that state,
+  /// so this is required copy rather than something to fill in later.
+  rolesEmptyLine   String @map("roles_empty_line") @db.VarChar(200)
+  rolesEmptyInvite String @map("roles_empty_invite") @db.VarChar(60)
+
+  openApplicationTitle   String @map("open_application_title") @db.VarChar(80)
+  openApplicationLead    String @map("open_application_lead")
+  /// Carried in place of a role title when someone applies without one.
+  openApplicationSubject String @map("open_application_subject") @db.VarChar(60)
+  /// Seeds the long field, in the APPLICANT's voice and left mid-sentence.
+  openApplicationSeed    String @map("open_application_seed") @db.VarChar(200)
+  /// ⚠ Asked only on the open application — a posted role already states its own terms.
+  commitmentLabel        String @map("commitment_label") @db.VarChar(60)
+
+  applicationBriefLabel  String @map("application_brief_label") @db.VarChar(60)
+  applicationSubmitLabel String @map("application_submit_label") @db.VarChar(40)
+
+  /// The cross-link to /about.
+  aboutInvite String @map("about_invite") @db.VarChar(120)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("careers_page")
+}
+
+/// What it is like to work here. Same `Claim` shape as AboutPrinciple — the site shares one
+/// type across both pages, so the two tables carry the same columns and the same limits.
+model CareersClaim {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  claim     String @db.VarChar(80)
+  backing   String
+
+  @@index([sortOrder])
+  @@map("careers_working_here")
+}
+
+/// How hiring runs. Same `Phase` shape as AboutBuildPhase.
+model CareersHiringPhase {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  span      String @db.VarChar(40)
+  name      String @db.VarChar(40)
+  detail    String
+
+  @@index([sortOrder])
+  @@map("careers_hiring_phases")
+}
+
+/// What an open applicant can say they are looking for. Ordered, because it renders as a
+/// choice list and the order is the order they are offered in.
+model CareersCommitmentOption {
+  id        String @id @default(uuid()) @db.Uuid
+  sortOrder Int    @map("sort_order")
+  label     String @db.VarChar(40)
+
+  @@index([sortOrder])
+  @@map("careers_commitment_options")
+}
+
+/// One open role. Free to add, remove and reorder — this is the table the whole careers page
+/// was handed to the panel for, and the roles shipped in the site's source are placeholders
+/// describing no vacancy that exists.
+///
+/// An empty list is a valid, designed state: the page renders `rolesEmptyLine` on its own.
+model CareerRole {
+  id         String   @id @default(uuid()) @db.Uuid
+  slug       String   @unique @db.VarChar(64)
+  sortOrder  Int      @map("sort_order")
+  title      String   @db.VarChar(100)
+  /// Decided PER ROLE — remote, hybrid or in the studio, whichever that opening needs. Not a
+  /// studio-wide policy, which is why it lives here rather than in the page's lead.
+  location   String   @db.VarChar(60)
+  commitment String   @db.VarChar(60)
+  /// Seeds the application form's long field, in the applicant's voice, left mid-sentence.
+  briefSeed  String   @map("brief_seed") @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  bullets CareerRoleBullet[]
+  /// Applications for this role. They outlive it — deleting a role sets this null on each and
+  /// leaves the title snapshot behind.
+  applications CareerApplication[]
+
+  @@index([sortOrder])
+  @@map("career_roles")
+}
+
+/// Which of a role's three lists a bullet belongs to.
+enum CareerRoleBulletKind {
+  /// What the person would be responsible for.
+  OWNS
+  /// What we would need to see to take the application seriously.
+  NEEDS
+  /// Genuinely optional, and labelled as such — "nice to have" lists are why good people
+  /// don't apply.
+  BONUS
+
+  @@map("career_role_bullet_kind")
+}
+
+/// A line in one of a role's three lists.
+///
+/// One table with a `kind` rather than three identical ones, which is the opposite of the call
+/// made for the footer's social and legal links — and the difference is where they render. The
+/// footer's two lists appear in different places on the page, so splitting them cost nothing
+/// and a `kind` column would have duplicated the split. These three appear in the same card,
+/// in the same shape, differing only by the heading above them; three identical tables would
+/// mean three identical models and three identical write paths.
+model CareerRoleBullet {
+  id        String               @id @default(uuid()) @db.Uuid
+  roleId    String               @map("role_id") @db.Uuid
+  kind      CareerRoleBulletKind
+  sortOrder Int                  @map("sort_order")
+  label     String
+
+  role CareerRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@index([roleId, kind, sortOrder])
+  @@map("career_role_bullets")
+}
+
+// ─── What the website sends, before anyone has decided it is worth anything ─────────────────
+//
+// ⚠ THESE ARE NOT LEADS, AND THAT IS THE POINT. A website submission used to become a `Contact`
+// the instant it arrived, which meant every bot, every test post and every "hi" landed in the
+// pipeline, in the counts, and in the reports. Now the public endpoints write here, and nothing
+// becomes a Contact until an admin presses the button. Spam is deleted from a table nothing else
+// reads rather than filtered out of one that everything reads.
+//
+// The consequence worth knowing: `visibility.ts` does not apply to either table, because neither
+// has an owner. They are admin-only for exactly that reason — there is no per-person scoping to
+// fall back on, so the gate is the role.
+
+/// One submission of the site's enquiry form, exactly as it arrived.
+///
+/// Kept after promotion rather than deleted: this row is the record of what the visitor actually
+/// typed and when, and the Contact it became is an edited, owned, worked version of it. The link
+/// between them is `promotedContactId`.
+///
+/// ⚠ `email` is NOT unique here, unlike `contacts.email`. Deduplication is a decision about
+/// people, and this table holds messages — the same person enquiring three times is three
+/// submissions and, after promotion, one contact with three enquiries.
+model Submission {
+  id      String  @id @default(uuid()) @db.Uuid
+  /// Stored lowercased via `normaliseEmail`, so matching against `contacts.email` on promotion
+  /// compares like with like. The uniqueness that matters is enforced over there, not here.
+  email   String  @db.VarChar(320)
+  /// ⚠ NULLABLE, because the site's form asks for exactly one thing — the email address. Everything
+  /// else there is an invitation, deliberately: a required-field wall in front of a first message
+  /// costs more conversations than a tidier inbox is worth. `promoteSubmission` fills a missing one
+  /// from the address, the same readable guess the spreadsheet importer makes.
+  name    String? @db.VarChar(120)
+  company String? @db.VarChar(120)
+  /// ⚠ Nullable for the same reason as `name`. An address with no message is still someone asking
+  /// to be contacted, and `enquiries.message` was already nullable, so it promotes cleanly.
+  message String?
+  /// The site's form asks for a mobile and validates it. Without this column it arrived here and
+  /// was dropped in silence — an enquiry is not a lesser record than an application.
+  phone   String? @db.VarChar(40)
+
+  /// What the site called this form — a page, a campaign, a discipline. Becomes the contact's
+  /// `origin_label` on promotion.
+  ///
+  /// ⚠ 120, not 40: it carries the form's subject, which names a discipline and, from the works
+  /// field, the project being pointed at — "Artificial Intelligence — like Halcyon".
+  source String? @db.VarChar(120)
+
+  /// Salted hash only, never the address itself — same rule as `Enquiry`.
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// Null while it is still in the inbox. Set when it becomes, or joins, a contact.
+  promotedAt        DateTime?   @map("promoted_at") @db.Timestamptz(6)
+  promotedContactId String?     @map("promoted_contact_id") @db.Uuid
+  promotedContact   Contact?    @relation(fields: [promotedContactId], references: [id], onDelete: SetNull)
+  promotedById      String?     @map("promoted_by_id") @db.Uuid
+  promotedBy        TeamMember? @relation("SubmissionPromoter", fields: [promotedById], references: [id], onDelete: SetNull)
+
+  /// Junk, marked rather than deleted so the same sender can be recognised and so the inbox can
+  /// show what it has already dealt with. A real delete stays available for anything worse.
+  dismissedAt DateTime? @map("dismissed_at") @db.Timestamptz(6)
+
+  // Pending rows are what the inbox opens on, so that is the index that has to be fast.
+  @@index([promotedAt, dismissedAt, createdAt])
+  @@index([email])
+  @@map("submissions")
+}
+
+/// Someone applying for a job.
+///
+/// ⚠ Emphatically not a lead and never promoted into one. A candidate is not a prospect, the two
+/// have opposite relationships to the studio, and a CV is far more sensitive than an enquiry.
+/// Nothing here touches `contacts`.
+model CareerApplication {
+  id    String  @id @default(uuid()) @db.Uuid
+  name  String  @db.VarChar(120)
+  email String  @db.VarChar(320)
+  phone String? @db.VarChar(40)
+  /// The applicant's answer to "why you" — the long field.
+  whyYou String @map("why_you")
+
+  /// A portfolio, a repository, a piece of writing.
+  workLink String? @map("work_link") @db.VarChar(500)
+  /// The CV, uploaded by the SITE to UploadThing, which sends us the resulting URL. No file ever
+  /// reaches this database — it stores a link like any other.
+  cvUrl    String? @map("cv_url") @db.VarChar(500)
+
+  /// The role applied for, or null for an open application.
+  ///
+  /// ⚠ `roleTitle` is a SNAPSHOT and is why the relation may go null. A role is deleted when it
+  /// closes — that is the designed way to close one — and an application must still say what it
+  /// was for a year later. Same rule as `ContactAttempt`: store the words, not just the pointer.
+  roleId    String?     @map("role_id") @db.Uuid
+  role      CareerRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  roleTitle String      @map("role_title") @db.VarChar(100)
+
+  /// What they are looking for. Asked only on open applications — a posted role already states
+  /// its own terms, so this is null for those.
+  commitment String? @db.VarChar(40)
+
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// When somebody actually read it. An inbox with no read/unread distinction is a pile.
+  reviewedAt   DateTime?   @map("reviewed_at") @db.Timestamptz(6)
+  reviewedById String?     @map("reviewed_by_id") @db.Uuid
+  reviewedBy   TeamMember? @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([reviewedAt, createdAt])
+  @@index([roleId])
+  @@map("career_applications")
 }
 
 /// Whether a stage still counts as live pipeline.
@@ -269,6 +707,8 @@ model TeamMember {
   importBatches    ImportBatch[]
   attempts         ContactAttempt[]
   stageChanges     ContactStageChange[]
+  promotedSubmissions  Submission[]        @relation("SubmissionPromoter")
+  reviewedApplications CareerApplication[] @relation("ApplicationReviewer")
 
   @@map("team_members")
 }
@@ -344,6 +784,8 @@ model Contact {
   attempts          ContactAttempt[]
   stageChanges      ContactStageChange[]
   customFieldValues ContactFieldValue[]
+  /// The website submissions that became, or joined, this person.
+  submissions       Submission[]
 
   @@index([stageId, createdAt])
   @@index([assignedToId, stageId])

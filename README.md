@@ -2,12 +2,22 @@
 
 The content control panel for the [voidix](https://github.com/Nexa-dev-co/orbix-dev) site.
 
-It owns the **text** of five sections — Services, Works, FAQ, Contact and Footer — plus the
-inbox of leads the contact form produces. Models, hull palettes, lighting, rock geometry and
-scene tuning stay in the site's source, where the in-app `?tune` GUI writes them.
+It owns the **text** of five homepage sections — Services, Works, FAQ, Contact and Footer — the
+two document pages, About and Careers, the shared enquiry form those sections render, and the
+lead pipeline. What the website sends arrives in two inboxes of its own: **Inbox** for enquiries
+and **Applications** for the careers form — neither is a lead until somebody says so, and an
+application never is. Models, hull palettes, lighting, rock geometry and scene tuning stay in the
+site's source, where the in-app `?tune` GUI writes them.
 
-Contact and Footer are built ahead of the site: neither section exists in `orbix-dev` yet, so
-their copy is stored and publishable but has nothing rendering it.
+All seven sections now exist on the site, and Careers was designed to end up here — its content
+file names this panel as where its roles are meant to come from. What the panel owns is the
+copy; the document pages' numbered section lists stay in the site's source, because each
+section's key is also its anchor and its station on the orbit rail.
+
+Contact and Footer were modelled *before* their sections were built, and both guessed wrong —
+Contact assumed a two-line title, an eyebrow, a standalone email address and six form strings the
+built section does not read; Footer assumed a flat social/legal split where the site has titled
+groups feeding two footers at once. Both were reshaped to match once the real sections landed.
 
 The site does **not** read from this database yet. Publishing works today: it snapshots the
 copy into a release and records that the site was not rebuilt. Wiring the site up is a
@@ -88,8 +98,18 @@ These are constraints in the site's code, not missing features:
 - **The Works heading is hardcoded.** `WorksField.tsx` says "Four fires." The panel warns you
   when the project count stops being four, but only a developer can change the heading.
 - **Section headings and nav copy aren't here.** They're still hardcoded in JSX and have to be
-  extracted into data files before a CMS can reach them. Contact and Footer are the exception —
-  their copy lives here already, waiting for the sections to be built.
+  extracted into data files before a CMS can reach them. The contact section's `04 — Start a
+  project` kicker is one of them (and is written out twice), as are the enquiry form's Name,
+  Email and Phone labels and its sent/failed messages, and both of the footer's sign-off lines.
+  The panel deliberately does **not** offer fields for the ones it cannot reach — an editable
+  field that changes nothing on the site is worse than no field — except the two footer lines,
+  which it carries with a note saying so.
+- **The site's forms still block their own submit.** `POST /api/submissions` and
+  `POST /api/applications` exist, fail closed and are tested, but the site has not been pointed at
+  them yet — that is a change in `orbix-dev`, not here.
+- **The About page's numbered sections aren't editable.** Adding, renaming or reordering one is
+  a developer change, because each section's key is an anchor id and an orbit-rail station
+  rather than a piece of copy.
 - **No rich text.** Every string renders as plain text into a styled element. HTML is stripped
   on save; markdown is flagged in the editor rather than silently rewritten, because prose
   legitimately contains dashes and underscores.
@@ -98,10 +118,14 @@ These are constraints in the site's code, not missing features:
 
 Two roles, held in `team_members` rather than in Supabase Auth:
 
-| | Site copy | Publish | Leads | Team | Settings |
-| --- | --- | --- | --- | --- | --- |
-| **Admin** | ✓ | ✓ | all, incl. delete | ✓ | ✓ |
-| **Sales** | — | — | **only their own** | — | — |
+| | Site copy | Publish | Leads | Inbox · Applications | Team | Settings |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Admin** | ✓ | ✓ | all, incl. delete | ✓ | ✓ | ✓ |
+| **Sales** | — | — | **only their own** | — | — | — |
+
+Inbox and Applications are admin-only for a structural reason, not a policy one: neither table
+has an owner column, so `visibility.ts` has nothing to scope a salesperson down to. The role is
+the whole gate. It also means an admin decides what enters the pipeline at all.
 
 Sales see strictly the leads assigned to them — not the team's, and not the unassigned pool
 unless an admin opens that up under Settings. This is enforced in one place,
@@ -241,27 +265,44 @@ Admin-only, at `/admin/settings`:
 - **Attempt vocabulary** — the channel and outcome lists. Entries are retired rather than
   deleted, so a word can come back without being re-created.
 
-### The intake endpoint
+### The intake endpoints
 
-`POST /api/leads` is the only route in this app reachable without logging in. Everything else
-sits behind the session guard in `proxy.ts`; this one is exempt and does its own checks.
+`POST /api/submissions` (the enquiry form) and `POST /api/applications` (the careers form) are
+the only routes in this app reachable without logging in. Everything else sits behind the session
+guard in `proxy.ts`; these two are exempt and do their own checks.
 
-It **fails closed**: with no `LEADS_INTAKE_SECRET` set it rejects every request, so a
-half-configured endpoint is shut rather than open. Once configured it checks, in order: a
+They **fail closed**: with no `LEADS_INTAKE_SECRET` set they reject every request, so a
+half-configured endpoint is shut rather than open. Once configured each checks, in order: a
 constant-time secret comparison, an optional origin allowlist, a honeypot field, and a
-per-IP-hash rate limit. Submissions are validated and stripped of HTML by the same code path
-as the rest of the CMS, and are never rendered as markup.
+per-IP-hash rate limit shared across both. Submissions are validated and stripped of HTML by the
+same code path as the rest of the CMS, and are never rendered as markup.
 
-The site should call it **from its own server**, not from the browser:
+**Neither creates a lead.** `/api/submissions` writes to the Inbox and stops; nothing joins the
+pipeline until an admin adds it. `/api/applications` writes to Applications, which has no path to
+the pipeline at all.
+
+The site should call them **from its own server**, not from the browser:
 
 ```ts
-await fetch("https://<cms-host>/api/leads", {
+await fetch("https://<cms-host>/api/submissions", {
   method: "POST",
   headers: {
     "content-type": "application/json",
     "x-voidix-secret": process.env.VOIDIX_CMS_SECRET,
   },
-  body: JSON.stringify({ name, email, company, message, website: "" }),
+  body: JSON.stringify({ name, email, company, message, source, website: "" }),
+});
+
+await fetch("https://<cms-host>/api/applications", {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "x-voidix-secret": process.env.VOIDIX_CMS_SECRET,
+  },
+  // `cvUrl` is whatever UploadThing hands back — no file is ever posted here.
+  body: JSON.stringify({
+    name, email, phone, whyYou, workLink, cvUrl, roleSlug, commitment, website: "",
+  }),
 });
 ```
 
