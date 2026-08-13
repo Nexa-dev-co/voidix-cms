@@ -700,7 +700,7 @@ it, so it only appeared at runtime. Constants moved to `lib/leads/importState.ts
 ### The proxy would have swallowed lead submissions
 
 Exempting the intake route from the session guard collided with the existing "already logged in →
-go to dashboard" redirect, which would have bounced submissions to `/admin` whenever the caller
+go to dashboard" redirect, which would have bounced submissions to `/` whenever the caller
 carried a session cookie — a 307 the caller reads as success. That redirect is now scoped to
 the login page only. *Caught before shipping, by re-reading the guard rather than trusting it.*
 
@@ -788,7 +788,7 @@ two tools fighting over the same values.
   turns out to be too blunt, the natural shape is an admin default with a per-member override,
   resolved as `override ?? default`.
 - **Reports carry no money.** Nothing in the schema records what a deal is worth, so every figure
-  on `/admin/reports` is a count. Win *rate* works; pipeline value, average deal size and revenue
+  on `/reports` is a count. Win *rate* works; pipeline value, average deal size and revenue
   do not exist and are not faked. Adding them means an amount on the contact — and a team that
   actually fills it in, or the charts read zero.
 - **A renamed stage drops out of historical win counts.** `contact_stage_changes` snapshots the
@@ -853,7 +853,7 @@ Shared with the site, since the two codebases are read together.
 
 ## 13. Reports
 
-One page, `/admin/reports`, for both roles. Not two pages: the sections a salesperson needs are
+One page, `/reports`, for both roles. Not two pages: the sections a salesperson needs are
 the same sections an admin needs, scoped differently, and two implementations of "win rate" is
 two numbers that eventually disagree. `visibility.ts` does the scoping, so a salesperson opening
 it sees their own pipeline without a single role check in the page.

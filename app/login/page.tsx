@@ -3,7 +3,7 @@ import { LoginForm } from "@/app/login/LoginForm";
 export default async function LoginPage(props: PageProps<"/login">) {
   const searchParams = await props.searchParams;
   const rawNext = searchParams.next;
-  const nextPath = typeof rawNext === "string" ? rawNext : "/admin";
+  const nextPath = typeof rawNext === "string" ? rawNext : "/";
 
   return (
     <main className="flex min-h-svh items-center justify-center px-6 py-12">

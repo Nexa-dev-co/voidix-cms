@@ -174,5 +174,5 @@ export function buildLeadsHref(
 
   const queryString = query.toString();
 
-  return queryString.length > 0 ? `/admin/leads?${queryString}` : "/admin/leads";
+  return queryString.length > 0 ? `/leads?${queryString}` : "/leads";
 }

@@ -13,7 +13,7 @@ function safeRedirectTarget(rawTarget: FormDataEntryValue | null): string {
     return target;
   }
 
-  return "/admin";
+  return "/";
 }
 
 export async function signInAction(

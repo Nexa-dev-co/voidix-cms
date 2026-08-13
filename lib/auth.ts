@@ -88,7 +88,7 @@ export async function requireAdmin(): Promise<CurrentMember> {
   const member = await requireMember();
 
   if (member.role !== TeamRole.ADMIN) {
-    redirect("/admin/leads");
+    redirect("/leads");
   }
 
   return member;

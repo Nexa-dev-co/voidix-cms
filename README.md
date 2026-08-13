@@ -252,7 +252,7 @@ name is the only owner they may set.
 
 ### Settings
 
-Admin-only, at `/admin/settings`:
+Admin-only, at `/settings`:
 
 - **New website leads** — leave unassigned, round-robin across active sales, or always one
   named person. The round-robin pointer is stored, so the rotation survives restarts and

@@ -198,7 +198,7 @@ path that skips the normalisation silently reopens the duplicate problem.
 
 **Roles live in `team_members`, not Supabase Auth.** Auth proves identity, the team row grants
 permission. An Auth user with no row can sign in and see nothing — that is the intended
-default, not a bug. Content pages are gated by `app/admin/(content)/layout.tsx` and every
+default, not a bug. Content pages are gated by `app/(panel)/(content)/layout.tsx` and every
 content action calls `requireAdmin()` separately, because actions are POST endpoints that
 never pass through a layout.
 

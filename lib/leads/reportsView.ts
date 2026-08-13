@@ -55,5 +55,5 @@ export function buildReportsHref(
 
   const queryString = query.toString();
 
-  return queryString.length > 0 ? `/admin/reports?${queryString}` : "/admin/reports";
+  return queryString.length > 0 ? `/reports?${queryString}` : "/reports";
 }

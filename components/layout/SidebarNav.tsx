@@ -7,36 +7,36 @@ import type { TeamRole } from "@/generated/prisma/enums";
 
 // Site copy. Admin only — a salesperson has no business republishing the homepage.
 const CONTENT_ITEMS = [
-  { href: "/admin/services", label: "Services", number: "01" },
-  { href: "/admin/works", label: "Works", number: "02" },
-  { href: "/admin/faq", label: "FAQ", number: "03" },
-  { href: "/admin/contact", label: "Contact", number: "04" },
-  { href: "/admin/footer", label: "Footer", number: "05" },
+  { href: "/services", label: "Services", number: "01" },
+  { href: "/works", label: "Works", number: "02" },
+  { href: "/faq", label: "FAQ", number: "03" },
+  { href: "/contact", label: "Contact", number: "04" },
+  { href: "/footer", label: "Footer", number: "05" },
   // The document pages. They sit after the five homepage sections because that is the order a
   // visitor meets them — the homepage first, then the two pages it links out to.
-  { href: "/admin/about", label: "About", number: "06" },
-  { href: "/admin/careers", label: "Careers", number: "07" },
+  { href: "/about", label: "About", number: "06" },
+  { href: "/careers", label: "Careers", number: "07" },
   // Last because it is not a section of the site — it is the form that appears inside six of
   // them, plus the vocabulary its subject line comes from.
-  { href: "/admin/enquiry-form", label: "Enquiry form", number: "08" },
+  { href: "/enquiry-form", label: "Enquiry form", number: "08" },
 ] as const;
 
 // Separated from the content sections: leads are inbound work and releases are a log.
 // Neither is copy you edit, so grouping them together would blur what "publish" acts on.
 const OPERATIONS_ITEMS = [
-  { href: "/admin/leads", label: "Leads", adminOnly: false },
+  { href: "/leads", label: "Leads", adminOnly: false },
   // What the website sent, before anyone has decided it is worth anything. Admin-only: neither
   // table has an owner column, so `visibility.ts` has nothing to scope by and the role is the
   // whole gate. Directly above Leads' neighbours because triaging it feeds them.
-  { href: "/admin/inbox", label: "Inbox", adminOnly: true },
+  { href: "/inbox", label: "Inbox", adminOnly: true },
   // Hiring, not sales. A CV is not pipeline material.
-  { href: "/admin/applications", label: "Applications", adminOnly: true },
+  { href: "/applications", label: "Applications", adminOnly: true },
   // Both roles: the page scopes itself through visibility.ts, so a salesperson opening it sees
   // their own pipeline rather than the team's.
-  { href: "/admin/reports", label: "Reports", adminOnly: false },
-  { href: "/admin/team", label: "Team", adminOnly: true },
-  { href: "/admin/settings", label: "Settings", adminOnly: true },
-  { href: "/admin/releases", label: "Releases", adminOnly: true },
+  { href: "/reports", label: "Reports", adminOnly: false },
+  { href: "/team", label: "Team", adminOnly: true },
+  { href: "/settings", label: "Settings", adminOnly: true },
+  { href: "/releases", label: "Releases", adminOnly: true },
 ] as const;
 
 export function SidebarNav({ role }: { role: TeamRole }) {
@@ -44,7 +44,7 @@ export function SidebarNav({ role }: { role: TeamRole }) {
   const isAdmin = role === "ADMIN";
 
   const isActive = (href: string) =>
-    href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const linkClasses = (active: boolean) =>
     `group flex items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors duration-150 ${
@@ -54,13 +54,13 @@ export function SidebarNav({ role }: { role: TeamRole }) {
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
       <Link
-        href="/admin"
-        aria-current={isActive("/admin") ? "page" : undefined}
-        className={linkClasses(isActive("/admin"))}
+        href="/"
+        aria-current={isActive("/") ? "page" : undefined}
+        className={linkClasses(isActive("/"))}
       >
         <span
           className={`text-[10px] tabular-nums tracking-widest ${
-            isActive("/admin") ? "text-accent" : "text-muted/60"
+            isActive("/") ? "text-accent" : "text-muted/60"
           }`}
         >
           00

@@ -80,10 +80,10 @@ export async function updateSessionAndGuard(request: NextRequest) {
   // here instead would redirect POSTs to the intake routes whenever the caller happened to carry
   // a valid session cookie, turning a stored submission into a 307 to the dashboard.
   if (user && pathname === LOGIN_PATH) {
-    const adminUrl = request.nextUrl.clone();
-    adminUrl.pathname = "/admin";
-    adminUrl.search = "";
-    return NextResponse.redirect(adminUrl);
+    const dashboardUrl = request.nextUrl.clone();
+    dashboardUrl.pathname = "/";
+    dashboardUrl.search = "";
+    return NextResponse.redirect(dashboardUrl);
   }
 
   return response;
