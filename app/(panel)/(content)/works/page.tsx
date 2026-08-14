@@ -10,6 +10,15 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * How many projects the site's camera path can compose distinctly.
+ *
+ * Advisory, not a limit — publishing more works, it just stops being interesting. The site derives
+ * the same ceiling from the same geometry; this number is repeated here rather than shared because
+ * it is a judgement about how the section reads, not a contract either side can break.
+ */
+const COMFORTABLE_PROJECT_COUNT = 6;
+
 export default async function WorksPage() {
   const projects = await prisma.project.findMany({
     orderBy: { sortOrder: "asc" },
@@ -21,7 +30,7 @@ export default async function WorksPage() {
       <PageHeader
         eyebrow="Section 02"
         title="Works"
-        description="The projects in the field. Add, reorder and remove freely — the counter and the ordinals follow the list."
+        description="The projects in the field. Add, reorder and remove freely — the counter, the ordinals, the camera path and the heading all follow the list."
         action={
           <ButtonLink href="/works/new" variant="secondary">
             Add project
@@ -29,12 +38,13 @@ export default async function WorksPage() {
         }
       />
 
-      {projects.length !== 4 && (
+      {projects.length > COMFORTABLE_PROJECT_COUNT && (
         <PageHeaderNote>
-          The Works heading on the site reads <strong className="text-fg">&ldquo;Four fires.&rdquo;</strong>{" "}
-          and is hardcoded in <code className="text-fg">WorksField.tsx</code>. With{" "}
-          {projects.length} project{projects.length === 1 ? "" : "s"} that heading is now wrong —
-          it needs a developer to change it.
+          {projects.length} projects. Every one gets its own shot on the camera path, and those
+          shots have to stay within about 35&deg; of face-on or the mark is seen edge-on and reads
+          as a bar. Past {COMFORTABLE_PROJECT_COUNT} there is not enough of that arc left to give
+          each project a distinct composition, so the later ones start to look alike. Nothing
+          breaks &mdash; it just stops being worth the scroll.
         </PageHeaderNote>
       )}
 
@@ -51,6 +61,11 @@ export default async function WorksPage() {
               </p>
               <p className="mt-0.5 text-xs text-muted">
                 {project.client} · {project.year}
+                {/* Not a warning — an initial is a designed state. But it is worth being able to
+                    see which projects are in it without opening each one. */}
+                {!project.markSvgUrl && (
+                  <span className="text-muted/50"> · no mark, grows its initial</span>
+                )}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {project.tags.map((tag) => (

@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 
 import { createProjectAction, updateProjectAction } from "@/app/(panel)/(content)/works/actions";
+import { MarkUploadField } from "@/app/(panel)/(content)/works/MarkUploadField";
 import { ButtonLink } from "@/components/ui/Button";
 import {
   ChipListField,
@@ -12,6 +13,7 @@ import {
   TextField,
 } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { MARK_FILE_FIELD } from "@/lib/content/markStorage";
 import { IDLE_FORM_STATE } from "@/lib/forms/formState";
 import { FIELD_LIMITS } from "@/lib/validation/contentSchemas";
 
@@ -23,6 +25,8 @@ export interface ProjectFormValues {
   description: string;
   tags: string[];
   disciplineId: string;
+  /** The mark already stored for this project, so the field can show what it is replacing. */
+  markSvgUrl?: string | null;
 }
 
 export function ProjectForm({
@@ -95,6 +99,11 @@ export function ProjectForm({
         maxCount={FIELD_LIMITS.tagCount}
         error={state.fieldErrors.tags}
         hint="Comma separated. Order is the order they appear in."
+      />
+
+      <MarkUploadField
+        currentUrl={project?.markSvgUrl}
+        error={state.fieldErrors[MARK_FILE_FIELD]}
       />
 
       <SelectField

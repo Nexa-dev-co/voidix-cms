@@ -30,6 +30,16 @@ export interface PublishedProject {
   tags: string[];
   /// The site's `DisciplineId`. Renders as the project's type key and decides its CTA.
   discipline: string;
+  /**
+   * The uploaded mark, as a public Storage URL — or null, which is a real state: the site grows the
+   * project's INITIAL instead of showing nothing.
+   *
+   * ⚠ The site's SERVER dereferences this while rendering and hands the page the SVG source; the URL
+   * itself never reaches a visitor's browser. That is not about the file — it is because a
+   * `<project-ref>.supabase.co` address in the page would advertise where the leads database lives.
+   * Anything on the site that starts fetching this client-side undoes the reason it is a URL at all.
+   */
+  markSvgUrl: string | null;
 }
 
 /**
@@ -303,6 +313,7 @@ export async function buildContentPayload(): Promise<ContentPayload> {
       description: project.description,
       tags: project.tags.map((tag) => tag.label),
       discipline: project.discipline.key,
+      markSvgUrl: project.markSvgUrl,
     })),
     faq: faqEntries.map((entry, position) => ({
       index: formatOrdinal(position),

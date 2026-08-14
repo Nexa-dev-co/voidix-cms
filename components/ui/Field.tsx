@@ -27,7 +27,14 @@ interface FieldShellProps {
   children: ReactNode;
 }
 
-function FieldShell({
+/**
+ * The label / hint / error frame every field in this panel wears.
+ *
+ * Exported so a field that lives outside this file — `MarkUploadField`, whose body is a file input
+ * and a preview rather than a control — still gets the same frame. Duplicating the markup is how two
+ * fields end up disagreeing about where an error message goes.
+ */
+export function FieldShell({
   label,
   rendersAs,
   hint,

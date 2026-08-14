@@ -4,11 +4,21 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
+import { MARK_FILE_FIELD, MARK_REMOVE_FIELD } from "@/lib/content/markStorage";
+import { deleteStoredMark, resolveMarkChange } from "@/lib/content/markUploads";
 import { planReorder, type MoveDirection } from "@/lib/content/reorder";
-import { formError, formErrorFromZod, formSuccess, type FormState } from "@/lib/forms/formState";
+import {
+  formError,
+  formErrorFromZod,
+  formFieldError,
+  formSuccess,
+  type FormState,
+} from "@/lib/forms/formState";
 import { prisma } from "@/lib/prisma";
 import { makeSlugUnique, slugify } from "@/lib/text/slugify";
 import { projectSchema } from "@/lib/validation/contentSchemas";
+
+const MARK_FIELDS = { fileField: MARK_FILE_FIELD, removeField: MARK_REMOVE_FIELD };
 
 function revalidateWorks(id?: string) {
   revalidatePath("/");
@@ -49,6 +59,15 @@ export async function createProjectAction(
     new Set(existingSlugs.map((project) => project.slug)),
   );
 
+  // Stored before the row is written — see `resolveMarkChange`. A create that then fails would
+  // leave one orphaned object in the bucket, which is a kilobyte; the reverse order leaves a
+  // project claiming a mark that is not there, which is a broken body on the site.
+  const markChange = await resolveMarkChange(formData, { projectSlug: slug, ...MARK_FIELDS });
+
+  if (markChange.kind === "refused") {
+    return formFieldError(MARK_FILE_FIELD, markChange.message);
+  }
+
   const highestSortOrder = await prisma.project.aggregate({ _max: { sortOrder: true } });
   const sortOrder = (highestSortOrder._max.sortOrder ?? -1) + 1;
 
@@ -61,6 +80,9 @@ export async function createProjectAction(
       year,
       description,
       disciplineId,
+      // A brand new project has nothing to clear, so "unchanged" and "cleared" both mean no mark.
+      markSvgUrl: markChange.kind === "stored" ? markChange.url : null,
+      markStoragePath: markChange.kind === "stored" ? markChange.storagePath : null,
       tags: {
         create: tags.map((label, index) => ({ sortOrder: index, label })),
       },
@@ -91,22 +113,50 @@ export async function updateProjectAction(
 
   const { title, client, year, description, tags, disciplineId } = parsed.data;
 
-  const existing = await prisma.project.findUnique({ where: { id }, select: { id: true } });
+  const existing = await prisma.project.findUnique({
+    where: { id },
+    // The old object's path, so replacing or clearing the mark can take the file with it rather
+    // than leaving something in the bucket nothing knows the name of.
+    select: { id: true, slug: true, markStoragePath: true },
+  });
 
   if (!existing) {
     return formError("That project no longer exists.");
   }
 
+  const markChange = await resolveMarkChange(formData, {
+    projectSlug: existing.slug,
+    ...MARK_FIELDS,
+  });
+
+  if (markChange.kind === "refused") {
+    return formFieldError(MARK_FILE_FIELD, markChange.message);
+  }
+
+  // `unchanged` writes neither column, so an ordinary copy edit cannot disturb the mark.
+  const markData =
+    markChange.kind === "stored"
+      ? { markSvgUrl: markChange.url, markStoragePath: markChange.storagePath }
+      : markChange.kind === "cleared"
+        ? { markSvgUrl: null, markStoragePath: null }
+        : {};
+
   await prisma.$transaction([
     prisma.project.update({
       where: { id },
-      data: { title, client, year, description, disciplineId },
+      data: { title, client, year, description, disciplineId, ...markData },
     }),
     prisma.projectTag.deleteMany({ where: { projectId: id } }),
     prisma.projectTag.createMany({
       data: tags.map((label, index) => ({ projectId: id, sortOrder: index, label })),
     }),
   ]);
+
+  // ⚠ AFTER the write, and only once it succeeded. Deleting first and then failing to write would
+  // destroy the file the row still points at.
+  if (markChange.kind !== "unchanged") {
+    await deleteStoredMark(existing.markStoragePath);
+  }
 
   revalidateWorks(id);
 
@@ -122,8 +172,16 @@ export async function deleteProjectAction(formData: FormData) {
     return;
   }
 
-  // Tags go with it via `onDelete: Cascade` on the relation.
+  // Read before the row goes: afterwards there is nothing left that knows where the file is.
+  const removed = await prisma.project.findUnique({
+    where: { id },
+    select: { markStoragePath: true },
+  });
+
+  // Tags go with it via `onDelete: Cascade` on the relation. The mark does not — storage has no
+  // foreign keys — so it is deleted by hand, after the row, for the ordering reason in `update`.
   await prisma.project.delete({ where: { id } });
+  await deleteStoredMark(removed?.markStoragePath);
 
   // Close the gap the delete left, so ordinals stay contiguous ("01, 02, 03" not "01, 03").
   const remaining = await prisma.project.findMany({

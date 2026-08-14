@@ -133,9 +133,14 @@ model ServiceCapability {
 
 /// A project in the Works field. Free to add, remove and reorder.
 ///
-/// One caveat the CMS cannot solve: each project is a rock you fly to, and the rock geometry
-/// stays in the site's source. A project added here renders with the global fallback rock, so
-/// several text-only additions in a row will read as the same body repeated.
+/// ⚠ The caveat that used to be recorded here — that an added project "renders with the global
+/// fallback rock", so several additions read as the same body repeated — described the METEOR era
+/// and stopped being true when the site's accretion strategy landed. The body IS the mark now: it
+/// is cut from this project's own uploaded SVG, and a project with no upload grows its own INITIAL
+/// instead. Two projects can only look alike if they share a first letter.
+///
+/// The camera pose is no longer hand-authored per project either — the site generates its path from
+/// however many projects exist. Adding one is a content decision again, not a developer task.
 model Project {
   id          String   @id @default(uuid()) @db.Uuid
   slug        String   @unique @db.VarChar(64)
@@ -150,6 +155,23 @@ model Project {
   /// project's type key and decides what its CTA enquires about.
   disciplineId String     @map("discipline_id") @db.Uuid
   discipline   Discipline @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+
+  /// The project's MARK — the logo the works field cuts into interlocking stones.
+  ///
+  /// ⚠ Published, but never rendered as a link. The site's SERVER dereferences this during ISR and
+  /// hands the page the SVG source; a visitor's browser never sees this URL. That is deliberate and
+  /// it is not about the file: a `<project-ref>.supabase.co` address in the page would advertise
+  /// where the leads database lives, which is the one thing the site's intake proxy exists to avoid.
+  ///
+  /// Null is a first-class state, not a missing value — the site grows the project's INITIAL.
+  markSvgUrl      String? @map("mark_svg_url") @db.VarChar(500)
+  /// The object's path inside the bucket.
+  ///
+  /// Kept alongside the URL, and NOT published, because a public URL is not a handle you can delete
+  /// by. Without this, replacing a mark twice leaves two orphans in the bucket that nothing knows
+  /// the name of.
+  markStoragePath String? @map("mark_storage_path") @db.VarChar(200)
+
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

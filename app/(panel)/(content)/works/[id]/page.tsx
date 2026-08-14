@@ -29,7 +29,7 @@ export default async function EditProjectPage(props: PageProps<"/works/[id]">) {
       <PageHeader
         eyebrow={`Project ${formatOrdinal(project.sortOrder)}`}
         title={project.title}
-        description="Copy only. The rock this project is carved into stays in the site's source."
+        description="The copy, and the mark the site carves this project into."
       />
 
       <ProjectForm
@@ -41,6 +41,7 @@ export default async function EditProjectPage(props: PageProps<"/works/[id]">) {
           description: project.description,
           tags: project.tags.map((tag) => tag.label),
           disciplineId: project.disciplineId,
+          markSvgUrl: project.markSvgUrl,
         }}
         disciplines={disciplines}
       />
