@@ -27,6 +27,7 @@ export function ContactForm({ contact }: { contact: ContactFormValues }) {
 
         <TextField
           label="Title"
+          rendersAs="section heading"
           name="title"
           defaultValue={contact.title}
           max={FIELD_LIMITS.contactTitle}
@@ -36,6 +37,7 @@ export function ContactForm({ contact }: { contact: ContactFormValues }) {
 
         <TextAreaField
           label="Lead"
+          rendersAs="paragraph"
           name="lead"
           defaultValue={contact.lead}
           max={FIELD_LIMITS.contactLead}
@@ -51,6 +53,7 @@ export function ContactForm({ contact }: { contact: ContactFormValues }) {
         <div className="grid gap-6 sm:grid-cols-2">
           <TextField
             label="Long field label"
+            rendersAs="label in the form"
             name="briefLabel"
             defaultValue={contact.briefLabel}
             max={FIELD_LIMITS.contactBriefLabel}
@@ -59,6 +62,7 @@ export function ContactForm({ contact }: { contact: ContactFormValues }) {
           />
           <TextField
             label="Submit button"
+            rendersAs="button label"
             name="submitLabel"
             defaultValue={contact.submitLabel}
             max={FIELD_LIMITS.contactSubmitLabel}

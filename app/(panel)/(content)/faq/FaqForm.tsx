@@ -31,6 +31,7 @@ export function FaqForm({ entry }: { entry?: FaqFormValues }) {
 
       <TextField
         label="Question"
+        rendersAs="the question row"
         name="question"
         defaultValue={entry?.question ?? ""}
         max={FIELD_LIMITS.faqQuestion}
@@ -39,6 +40,7 @@ export function FaqForm({ entry }: { entry?: FaqFormValues }) {
 
       <ParagraphsField
         label="Answer"
+        rendersAs="paragraphs"
         name="answer"
         defaultValue={entry?.answer ?? ""}
         maxParagraph={FIELD_LIMITS.faqParagraph}

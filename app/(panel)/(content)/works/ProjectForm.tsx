@@ -46,6 +46,7 @@ export function ProjectForm({
 
       <TextField
         label="Title"
+        rendersAs="card heading"
         name="title"
         defaultValue={project?.title ?? ""}
         max={FIELD_LIMITS.projectTitle}
@@ -56,6 +57,7 @@ export function ProjectForm({
       <div className="grid gap-6 sm:grid-cols-[1fr_8rem]">
         <TextField
           label="Client"
+          rendersAs="beside the year"
           name="client"
           defaultValue={project?.client ?? ""}
           max={FIELD_LIMITS.projectClient}
@@ -64,6 +66,7 @@ export function ProjectForm({
         />
         <TextField
           label="Year"
+          rendersAs="beside the client"
           name="year"
           defaultValue={project?.year ?? ""}
           max={FIELD_LIMITS.projectYear}
@@ -74,6 +77,7 @@ export function ProjectForm({
 
       <TextAreaField
         label="Description"
+        rendersAs="paragraph"
         name="description"
         defaultValue={project?.description ?? ""}
         max={FIELD_LIMITS.projectDescription}
@@ -84,6 +88,7 @@ export function ProjectForm({
 
       <ChipListField
         label="Tags"
+        rendersAs="chips"
         name="tags"
         defaultValue={project?.tags ?? []}
         maxLabel={FIELD_LIMITS.tagLabel}
@@ -94,6 +99,7 @@ export function ProjectForm({
 
       <SelectField
         label="Kind of work"
+        rendersAs="sets the form's subject"
         name="disciplineId"
         defaultValue={project?.disciplineId ?? disciplines[0]?.id}
         options={disciplines.map((discipline) => ({

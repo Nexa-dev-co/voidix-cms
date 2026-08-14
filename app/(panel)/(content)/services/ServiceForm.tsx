@@ -39,6 +39,7 @@ export function ServiceForm({
 
       <TextField
         label="Name"
+        rendersAs="card heading"
         name="name"
         defaultValue={service.name}
         max={FIELD_LIMITS.serviceName}
@@ -48,6 +49,7 @@ export function ServiceForm({
 
       <TextField
         label="Eyebrow"
+        rendersAs="above the name"
         name="eyebrow"
         defaultValue={service.eyebrow}
         max={FIELD_LIMITS.serviceEyebrow}
@@ -57,6 +59,7 @@ export function ServiceForm({
 
       <TextAreaField
         label="Description"
+        rendersAs="paragraph"
         name="description"
         defaultValue={service.description}
         max={FIELD_LIMITS.serviceDescription}
@@ -67,6 +70,7 @@ export function ServiceForm({
 
       <ChipListField
         label="Capabilities"
+        rendersAs="chips"
         name="capabilities"
         defaultValue={service.capabilities}
         maxLabel={FIELD_LIMITS.capabilityLabel}
@@ -77,6 +81,7 @@ export function ServiceForm({
 
       <SelectField
         label="Enquiries about"
+        rendersAs="sets the form's subject"
         name="disciplineId"
         defaultValue={service.disciplineId}
         options={disciplines.map((discipline) => ({

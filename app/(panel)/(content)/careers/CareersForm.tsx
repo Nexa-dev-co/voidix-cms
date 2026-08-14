@@ -46,6 +46,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Eyebrow"
+          rendersAs="above the title"
           name="eyebrow"
           defaultValue={careers.eyebrow}
           max={FIELD_LIMITS.documentEyebrow}
@@ -55,6 +56,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
         <div className="grid gap-6 sm:grid-cols-2">
           <TextField
             label="Title line 1"
+            rendersAs="display heading"
             name="titleLine1"
             defaultValue={careers.titleLine1}
             max={FIELD_LIMITS.documentTitleLine}
@@ -62,6 +64,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
           />
           <TextField
             label="Title line 2"
+            rendersAs="display heading"
             name="titleLine2"
             defaultValue={careers.titleLine2}
             max={FIELD_LIMITS.documentTitleLine}
@@ -71,6 +74,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextAreaField
           label="Lead"
+          rendersAs="paragraph"
           name="lead"
           defaultValue={careers.lead}
           max={FIELD_LIMITS.documentLead}
@@ -84,6 +88,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <DelimitedListField
           label="Claims"
+          rendersAs="numbered claims"
           name="workingHere"
           parts={CLAIM_PARTS}
           defaultValue={careers.workingHere}
@@ -99,6 +104,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Empty-roles line"
+          rendersAs="shown when no roles"
           name="rolesEmptyLine"
           defaultValue={careers.rolesEmptyLine}
           max={FIELD_LIMITS.rolesEmptyLine}
@@ -108,6 +114,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Empty-roles link"
+          rendersAs="shown when no roles"
           name="rolesEmptyInvite"
           defaultValue={careers.rolesEmptyInvite}
           max={FIELD_LIMITS.rolesEmptyInvite}
@@ -121,6 +128,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <DelimitedListField
           label="Phases"
+          rendersAs="numbered phases"
           name="hiringPhases"
           parts={PHASE_PARTS}
           defaultValue={careers.hiringPhases}
@@ -136,6 +144,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Title"
+          rendersAs="section heading"
           name="openApplicationTitle"
           defaultValue={careers.openApplicationTitle}
           max={FIELD_LIMITS.openApplicationTitle}
@@ -144,6 +153,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextAreaField
           label="Lead"
+          rendersAs="paragraph"
           name="openApplicationLead"
           defaultValue={careers.openApplicationLead}
           max={FIELD_LIMITS.openApplicationLead}
@@ -153,6 +163,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Subject"
+          rendersAs="the form's subject"
           name="openApplicationSubject"
           defaultValue={careers.openApplicationSubject}
           max={FIELD_LIMITS.openApplicationSubject}
@@ -162,6 +173,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Brief seed"
+          rendersAs="seeds the form"
           name="openApplicationSeed"
           defaultValue={careers.openApplicationSeed}
           max={FIELD_LIMITS.applicationSeed}
@@ -171,6 +183,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Commitment label"
+          rendersAs="label in the form"
           name="commitmentLabel"
           defaultValue={careers.commitmentLabel}
           max={FIELD_LIMITS.applicationLabel}
@@ -180,6 +193,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <ChipListField
           label="Commitment options"
+          rendersAs="choice chips"
           name="commitmentOptions"
           defaultValue={careers.commitmentOptions}
           maxLabel={FIELD_LIMITS.commitmentOption}
@@ -194,6 +208,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
         <div className="grid gap-6 sm:grid-cols-2">
           <TextField
             label="Long field label"
+            rendersAs="label in the form"
             name="applicationBriefLabel"
             defaultValue={careers.applicationBriefLabel}
             max={FIELD_LIMITS.applicationLabel}
@@ -202,6 +217,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
           />
           <TextField
             label="Submit button"
+            rendersAs="button label"
             name="applicationSubmitLabel"
             defaultValue={careers.applicationSubmitLabel}
             max={FIELD_LIMITS.applicationSubmitLabel}
@@ -211,6 +227,7 @@ export function CareersForm({ careers }: { careers: CareersFormValues }) {
 
         <TextField
           label="Link to About"
+          rendersAs="link to /about"
           name="aboutInvite"
           defaultValue={careers.aboutInvite}
           max={FIELD_LIMITS.documentInvite}

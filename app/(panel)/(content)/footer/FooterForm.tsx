@@ -26,6 +26,7 @@ export function FooterForm({ footer }: { footer: FooterFormValues }) {
 
         <LinkGroupsField
           label="Link groups"
+          rendersAs="titled columns"
           name="linkGroups"
           defaultValue={footer.linkGroups}
           maxGroups={FIELD_LIMITS.footerGroupCount}
@@ -48,6 +49,7 @@ export function FooterForm({ footer }: { footer: FooterFormValues }) {
 
         <TextField
           label="Tagline"
+          rendersAs="one line"
           name="tagline"
           defaultValue={footer.tagline}
           max={FIELD_LIMITS.footerTagline}
@@ -57,6 +59,7 @@ export function FooterForm({ footer }: { footer: FooterFormValues }) {
 
         <TextField
           label="Sign-off line"
+          rendersAs="one line"
           name="signOff"
           defaultValue={footer.signOff}
           max={FIELD_LIMITS.footerSignOff}

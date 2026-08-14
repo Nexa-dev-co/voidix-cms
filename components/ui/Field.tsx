@@ -10,6 +10,15 @@ const CONTROL_CLASSES =
 
 interface FieldShellProps {
   label: string;
+  /**
+   * The shape this value takes on the site — "chips", "bullets", "paragraphs".
+   *
+   * The label says what the site calls it; this says what the site does with it. They are
+   * different questions and an editor needs both: `bonus` and `needs` are both lists of short
+   * strings, and only one of them renders as chips. A line that reads fine as a bullet becomes
+   * an unreadably wide chip, and nothing in the stored value distinguishes them.
+   */
+  rendersAs?: string;
   hint?: string;
   error?: string;
   /** Live "84 / 120" counter. Turns amber near the cap and red past it. */
@@ -18,7 +27,15 @@ interface FieldShellProps {
   children: ReactNode;
 }
 
-function FieldShell({ label, hint, error, counter, warnings, children }: FieldShellProps) {
+function FieldShell({
+  label,
+  rendersAs,
+  hint,
+  error,
+  counter,
+  warnings,
+  children,
+}: FieldShellProps) {
   const isOverLimit = counter ? counter.current > counter.max : false;
   const isNearLimit = counter ? !isOverLimit && counter.current > counter.max * 0.9 : false;
 
@@ -26,15 +43,23 @@ function FieldShell({ label, hint, error, counter, warnings, children }: FieldSh
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-4">
         <label className="text-xs uppercase tracking-[0.14em] text-muted">{label}</label>
-        {counter && (
-          <span
-            className={`text-[11px] tabular-nums ${
-              isOverLimit ? "text-danger" : isNearLimit ? "text-warning" : "text-muted"
-            }`}
-          >
-            {counter.current} / {counter.max}
-          </span>
-        )}
+
+        <div className="flex shrink-0 items-baseline gap-2.5">
+          {rendersAs && (
+            <span className="text-[10px] lowercase tracking-[0.1em] text-muted/70">
+              {rendersAs}
+            </span>
+          )}
+          {counter && (
+            <span
+              className={`text-[11px] tabular-nums ${
+                isOverLimit ? "text-danger" : isNearLimit ? "text-warning" : "text-muted"
+              }`}
+            >
+              {counter.current} / {counter.max}
+            </span>
+          )}
+        </div>
       </div>
 
       {children}
@@ -61,6 +86,7 @@ function FieldShell({ label, hint, error, counter, warnings, children }: FieldSh
  */
 export function TextField({
   label,
+  rendersAs,
   name,
   defaultValue = "",
   max,
@@ -69,6 +95,7 @@ export function TextField({
   placeholder,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: string;
   max: number;
@@ -79,7 +106,13 @@ export function TextField({
   const [value, setValue] = useState(defaultValue);
 
   return (
-    <FieldShell label={label} hint={hint} error={error} counter={{ current: value.length, max }}>
+    <FieldShell
+      label={label}
+      rendersAs={rendersAs}
+      hint={hint}
+      error={error}
+      counter={{ current: value.length, max }}
+    >
       <input
         type="text"
         name={name}
@@ -95,6 +128,7 @@ export function TextField({
 /** A multi-line field that also flags markdown the site would render as literal characters. */
 export function TextAreaField({
   label,
+  rendersAs,
   name,
   defaultValue = "",
   max,
@@ -104,6 +138,7 @@ export function TextAreaField({
   placeholder,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: string;
   max: number;
@@ -117,6 +152,7 @@ export function TextAreaField({
   return (
     <FieldShell
       label={label}
+      rendersAs={rendersAs}
       hint={hint}
       error={error}
       counter={{ current: value.length, max }}
@@ -142,6 +178,7 @@ export function TextAreaField({
  */
 export function SelectField({
   label,
+  rendersAs,
   name,
   defaultValue,
   options,
@@ -149,6 +186,7 @@ export function SelectField({
   error,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: string;
   options: { value: string; label: string }[];
@@ -156,7 +194,7 @@ export function SelectField({
   error?: string;
 }) {
   return (
-    <FieldShell label={label} hint={hint} error={error}>
+    <FieldShell label={label} rendersAs={rendersAs} hint={hint} error={error}>
       <select name={name} defaultValue={defaultValue} className={CONTROL_CLASSES}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -175,6 +213,7 @@ export function SelectField({
  */
 export function ChipListField({
   label,
+  rendersAs,
   name,
   defaultValue = [],
   maxLabel,
@@ -183,6 +222,7 @@ export function ChipListField({
   error,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: string[];
   maxLabel: number;
@@ -200,6 +240,7 @@ export function ChipListField({
   return (
     <FieldShell
       label={label}
+      rendersAs={rendersAs}
       hint={hint}
       error={error}
       counter={{ current: chips.length, max: maxCount }}
@@ -239,6 +280,7 @@ export function ChipListField({
  */
 export function ParagraphsField({
   label,
+  rendersAs,
   name,
   defaultValue = "",
   maxParagraph,
@@ -247,6 +289,7 @@ export function ParagraphsField({
   error,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: string;
   maxParagraph: number;
@@ -269,6 +312,7 @@ export function ParagraphsField({
   return (
     <FieldShell
       label={label}
+      rendersAs={rendersAs}
       hint={hint}
       error={error}
       counter={{ current: paragraphs.length, max: maxCount }}
@@ -313,6 +357,7 @@ const GROUP_TITLE_LINE = /^\[(.*)\]$/;
  */
 export function LinkGroupsField({
   label,
+  rendersAs,
   name,
   defaultValue = [],
   maxGroups,
@@ -321,6 +366,7 @@ export function LinkGroupsField({
   error,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: { title: string; links: { label: string; href: string }[] }[];
   maxGroups: number;
@@ -376,6 +422,7 @@ export function LinkGroupsField({
   return (
     <FieldShell
       label={label}
+      rendersAs={rendersAs}
       hint={hint}
       error={error}
       counter={{ current: groups.length, max: maxGroups }}
@@ -442,11 +489,18 @@ export function LinkGroupsField({
  * An ordered list of sentences, one per line.
  *
  * Not `ChipListField`, which also splits on commas — every entry here is a full sentence and
- * most of them contain one. The preview is a numbered list rather than chips, because that is
- * how these render: a role's responsibilities, not a row of tags.
+ * most of them contain one.
+ *
+ * ⚠ The input shape and the RENDERED shape are two different decisions, and a role's `bonus`
+ * is why `previewAs` exists. It renders on the site as chips, but one of the site's own
+ * examples is "Native graphics (Metal, Vulkan)" — parse that on commas and it becomes two
+ * broken chips. So the typing stays newline-separated and comma-safe while the preview shows
+ * what the visitor will actually see. Never switch a field to `ChipListField` merely because
+ * the site draws it as chips.
  */
 export function LineListField({
   label,
+  rendersAs,
   name,
   defaultValue = [],
   maxEntry,
@@ -454,8 +508,10 @@ export function LineListField({
   hint,
   error,
   placeholder,
+  previewAs = "numbered",
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   defaultValue?: string[];
   maxEntry: number;
@@ -463,6 +519,7 @@ export function LineListField({
   hint?: string;
   error?: string;
   placeholder?: string;
+  previewAs?: "numbered" | "chips";
 }) {
   const [value, setValue] = useState(defaultValue.join("\n"));
 
@@ -474,6 +531,7 @@ export function LineListField({
   return (
     <FieldShell
       label={label}
+      rendersAs={rendersAs}
       hint={hint}
       error={error}
       counter={{ current: entries.length, max: maxCount }}
@@ -488,20 +546,36 @@ export function LineListField({
         className={`${CONTROL_CLASSES} resize-y leading-relaxed`}
       />
 
-      {entries.length > 0 && (
-        <ol className="flex flex-col gap-1 pt-1">
-          {entries.map((entry, index) => (
-            <li key={index} className="flex items-baseline gap-2 text-[11px]">
-              <span aria-hidden className="shrink-0 tabular-nums text-muted/50">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span className={entry.length > maxEntry ? "text-danger" : "text-muted"}>
+      {entries.length > 0 &&
+        (previewAs === "chips" ? (
+          <ul className="flex flex-wrap gap-1.5 pt-1">
+            {entries.map((entry, index) => (
+              <li
+                key={index}
+                className={`rounded-sm border px-2 py-0.5 text-[11px] ${
+                  entry.length > maxEntry
+                    ? "border-danger/40 text-danger"
+                    : "border-border-strong text-muted"
+                }`}
+              >
                 {entry}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ol className="flex flex-col gap-1 pt-1">
+            {entries.map((entry, index) => (
+              <li key={index} className="flex items-baseline gap-2 text-[11px]">
+                <span aria-hidden className="shrink-0 tabular-nums text-muted/50">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className={entry.length > maxEntry ? "text-danger" : "text-muted"}>
+                  {entry}
+                </span>
+              </li>
+            ))}
+          </ol>
+        ))}
     </FieldShell>
   );
 }
@@ -516,6 +590,7 @@ export function LineListField({
  */
 export function DelimitedListField({
   label,
+  rendersAs,
   name,
   parts,
   defaultValue = [],
@@ -525,6 +600,7 @@ export function DelimitedListField({
   placeholder,
 }: {
   label: string;
+  rendersAs?: string;
   name: string;
   /** In order, and each one required — the server rejects a line missing any of them. */
   parts: readonly { key: string; label: string; max: number }[];
@@ -554,6 +630,7 @@ export function DelimitedListField({
   return (
     <FieldShell
       label={label}
+      rendersAs={rendersAs}
       hint={hint}
       error={error}
       counter={{ current: rows.length, max: maxCount }}

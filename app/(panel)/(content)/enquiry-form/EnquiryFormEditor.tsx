@@ -44,6 +44,7 @@ export function EnquiryFormEditor({
         <div className="grid gap-6 sm:grid-cols-3">
           <TextField
             label="Name"
+            rendersAs="field label"
             name="nameLabel"
             defaultValue={enquiryForm.nameLabel}
             max={FIELD_LIMITS.enquiryFieldLabel}
@@ -51,6 +52,7 @@ export function EnquiryFormEditor({
           />
           <TextField
             label="Email"
+            rendersAs="field label"
             name="emailLabel"
             defaultValue={enquiryForm.emailLabel}
             max={FIELD_LIMITS.enquiryFieldLabel}
@@ -58,6 +60,7 @@ export function EnquiryFormEditor({
           />
           <TextField
             label="Phone"
+            rendersAs="field label"
             name="phoneLabel"
             defaultValue={enquiryForm.phoneLabel}
             max={FIELD_LIMITS.enquiryFieldLabel}
@@ -77,6 +80,7 @@ export function EnquiryFormEditor({
 
         <TextField
           label="While sending"
+          rendersAs="while sending"
           name="sendingLabel"
           defaultValue={enquiryForm.sendingLabel}
           max={FIELD_LIMITS.enquirySendingLabel}
@@ -86,6 +90,7 @@ export function EnquiryFormEditor({
 
         <TextField
           label="Sent"
+          rendersAs="success message"
           name="sentMessage"
           defaultValue={enquiryForm.sentMessage}
           max={FIELD_LIMITS.enquiryMessage}
@@ -95,6 +100,7 @@ export function EnquiryFormEditor({
 
         <TextField
           label="Failed"
+          rendersAs="error message"
           name="errorMessage"
           defaultValue={enquiryForm.errorMessage}
           max={FIELD_LIMITS.enquiryMessage}
@@ -153,6 +159,7 @@ export function EnquiryFormEditor({
 
         <TextField
           label="Added to the subject"
+          rendersAs="appended to the subject"
           name="referenceSubjectSuffix"
           defaultValue={enquiryForm.referenceSubjectSuffix}
           max={FIELD_LIMITS.referenceSubjectSuffix}
@@ -162,6 +169,7 @@ export function EnquiryFormEditor({
 
         <TextField
           label="Added before the brief"
+          rendersAs="leads the brief"
           name="referenceBriefPrefix"
           defaultValue={enquiryForm.referenceBriefPrefix}
           max={FIELD_LIMITS.referenceBriefPrefix}

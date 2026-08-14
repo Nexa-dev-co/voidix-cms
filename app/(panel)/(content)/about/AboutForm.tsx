@@ -51,6 +51,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextField
           label="Eyebrow"
+          rendersAs="above the title"
           name="eyebrow"
           defaultValue={about.eyebrow}
           max={FIELD_LIMITS.documentEyebrow}
@@ -81,6 +82,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextAreaField
           label="Lead"
+          rendersAs="paragraph"
           name="lead"
           defaultValue={about.lead}
           max={FIELD_LIMITS.documentLead}
@@ -94,6 +96,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <ParagraphsField
           label="Paragraphs"
+          rendersAs="paragraphs"
           name="premiseParagraphs"
           defaultValue={about.premiseParagraphs}
           maxParagraph={FIELD_LIMITS.documentParagraph}
@@ -104,6 +107,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextAreaField
           label="Pull quote"
+          rendersAs="pull quote"
           name="premiseQuote"
           defaultValue={about.premiseQuote}
           max={FIELD_LIMITS.documentQuote}
@@ -118,6 +122,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <DelimitedListField
           label="Principles"
+          rendersAs="numbered claims"
           name="principles"
           parts={CLAIM_PARTS}
           defaultValue={about.principles}
@@ -133,6 +138,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <DelimitedListField
           label="Phases"
+          rendersAs="numbered phases"
           name="buildPhases"
           parts={PHASE_PARTS}
           defaultValue={about.buildPhases}
@@ -148,6 +154,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <DelimitedListField
           label="Instruments"
+          rendersAs="label and value rows"
           name="instruments"
           parts={INSTRUMENT_PARTS}
           defaultValue={about.instruments}
@@ -159,6 +166,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextField
           label="Note under the instruments"
+          rendersAs="note under the rows"
           name="instrumentsNote"
           defaultValue={about.instrumentsNote}
           max={FIELD_LIMITS.documentNote}
@@ -171,6 +179,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <ChipListField
           label="Stack"
+          rendersAs="chips"
           name="stack"
           defaultValue={about.stack}
           maxLabel={FIELD_LIMITS.stackItem}
@@ -181,6 +190,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextField
           label="Note under the stack"
+          rendersAs="note under the chips"
           name="stackNote"
           defaultValue={about.stackNote}
           max={FIELD_LIMITS.documentNote}
@@ -193,6 +203,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextField
           label="Closing title"
+          rendersAs="closing heading"
           name="closingTitle"
           defaultValue={about.closingTitle}
           max={FIELD_LIMITS.documentClosingTitle}
@@ -201,6 +212,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextAreaField
           label="Closing lead"
+          rendersAs="paragraph"
           name="closingLead"
           defaultValue={about.closingLead}
           max={FIELD_LIMITS.documentClosingLead}
@@ -210,6 +222,7 @@ export function AboutForm({ about }: { about: AboutFormValues }) {
 
         <TextField
           label="Link to Careers"
+          rendersAs="link to /careers"
           name="careersInvite"
           defaultValue={about.careersInvite}
           max={FIELD_LIMITS.documentInvite}
