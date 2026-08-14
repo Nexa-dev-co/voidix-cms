@@ -18,7 +18,14 @@ interface FieldShellProps {
   children: ReactNode;
 }
 
-function FieldShell({ label, hint, error, counter, warnings, children }: FieldShellProps) {
+/**
+ * The label / hint / error frame every field in this panel wears.
+ *
+ * Exported so a field that lives outside this file — `MarkUploadField`, whose body is a file input
+ * and a preview rather than a control — still gets the same frame. Duplicating the markup is how two
+ * fields end up disagreeing about where an error message goes.
+ */
+export function FieldShell({ label, hint, error, counter, warnings, children }: FieldShellProps) {
   const isOverLimit = counter ? counter.current > counter.max : false;
   const isNearLimit = counter ? !isOverLimit && counter.current > counter.max * 0.9 : false;
 
