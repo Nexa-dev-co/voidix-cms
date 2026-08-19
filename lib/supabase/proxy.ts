@@ -25,6 +25,16 @@ const PUBLIC_PATHS = new Set<string>([
   "/api/submissions",
   "/api/applications",
   "/api/content",
+  // The site's analytics batches. Machine-called like the two above, and with a harder constraint:
+  // the last batch of a visit is sent by `navigator.sendBeacon` during `pagehide`, which cannot
+  // follow a redirect and cannot report that it failed — a 307 to the login page would silently
+  // discard exactly the events that record somebody leaving. It meets the same obligation as its
+  // neighbours, through the same shared-secret guard, and fails closed when unconfigured.
+  "/api/journey",
+  // Withdrawal. Called by the website on a visitor's behalf when they turn recognition off, and it
+  // must not be behind a session for the same reason as its neighbours. ⚠ `/api/journey/maintenance`
+  // is deliberately NOT here — that one deletes on a schedule and carries its own separate secret.
+  "/api/journey/forget",
 ]);
 
 /**
