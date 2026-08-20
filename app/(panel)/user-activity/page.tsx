@@ -1,7 +1,10 @@
+import Link from "next/link";
+
 import CursorHeatmap from "@/app/(panel)/user-activity/CursorHeatmap";
 import ActivityFilters from "@/app/(panel)/user-activity/ActivityFilters";
 import VisitsTrend from "@/app/(panel)/user-activity/VisitsTrend";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ExpandableRows } from "@/components/ui/ExpandableRows";
 import { requireMember } from "@/lib/auth";
 import { buildActivityReport, type ActivityReport } from "@/lib/journey/activityReport";
 import {
@@ -9,7 +12,7 @@ import {
   resolveActivityWindow,
   type ActivityWindow,
 } from "@/lib/journey/activityWindow";
-import { parseActivityParams } from "@/lib/journey/activityView";
+import { ATTENTION_PATH, parseActivityParams } from "@/lib/journey/activityView";
 import {
   humanise,
   describeTargetLabel,
@@ -221,7 +224,7 @@ function SectionReach({ report, phrase }: { report: ActivityReport; phrase: stri
   return (
     <Section title="How far they got" note={`Sections reached, ${phrase}, by number of visits.`}>
       <Card>
-        <ul className="flex flex-col gap-3">
+        <ExpandableRows as="ul" className="flex flex-col gap-3" label="sections">
           {report.sectionReach.map((row) => (
             <li key={row.section} className="flex flex-col gap-1.5">
               <div className="flex items-baseline justify-between gap-4">
@@ -237,7 +240,7 @@ function SectionReach({ report, phrase }: { report: ActivityReport; phrase: stri
               </div>
             </li>
           ))}
-        </ul>
+        </ExpandableRows>
       </Card>
     </Section>
   );
@@ -293,7 +296,7 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
                   <th className="pb-2 text-right font-normal">Rage</th>
                 </tr>
               </thead>
-              <tbody>
+              <ExpandableRows as="tbody" colSpan={3} label="targets">
                 {report.friction.map((row) => (
                   <tr key={row.target} className="border-t border-border">
                     <td className="py-1.5 pr-4 text-xs text-fg">
@@ -311,14 +314,25 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
                     </td>
                   </tr>
                 ))}
-              </tbody>
+              </ExpandableRows>
             </table>
           </MiniCard>
         )}
 
         {report.attention.length > 0 && (
-          <MiniCard title="What held the cursor" note="Median dwell per element.">
-            <ul className="flex flex-col gap-2">
+          <MiniCard
+            title="What held the cursor"
+            note="Median dwell per element. The top few — the full list has filters and says which craft or project each one was on."
+            action={
+              <Link
+                href={ATTENTION_PATH}
+                className="shrink-0 text-[11px] text-muted underline-offset-4 hover:text-fg hover:underline"
+              >
+                See all
+              </Link>
+            }
+          >
+            <ExpandableRows as="ul" className="flex flex-col gap-2" label="elements">
               {report.attention.map((row) => (
                 <li key={row.target} className="flex items-baseline justify-between gap-4">
                   <span className="min-w-0 truncate text-xs text-fg">
@@ -332,7 +346,7 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
                   </span>
                 </li>
               ))}
-            </ul>
+            </ExpandableRows>
           </MiniCard>
         )}
 
@@ -428,15 +442,18 @@ function Heatmaps({ report }: { report: ActivityReport }) {
               <span className="text-sm text-fg">{routeLabel(route)}</span>
               <span className="font-mono text-[11px] text-muted">{route}</span>
             </h3>
-            <div className="grid gap-6 lg:grid-cols-2">
+            {/* ⚠ Per ROUTE, so each page's heatmaps expand independently. Grouping by layout in v4
+                multiplied these — a section with both a wide and a narrow picture is two cards — so
+                a route that used to show four can now show eight. */}
+            <ExpandableRows as="div" className="grid gap-6 lg:grid-cols-2" label="heatmaps">
               {report.heatmaps
                 .filter((heatmap) => heatmap.route === route)
                 .map((heatmap) => (
-                  <Card key={`${heatmap.route}${heatmap.section}`}>
+                  <Card key={`${heatmap.route}${heatmap.section}${heatmap.layout}`}>
                     <CursorHeatmap heatmap={heatmap} />
                   </Card>
                 ))}
-            </div>
+            </ExpandableRows>
           </div>
         ))}
       </div>
@@ -490,15 +507,21 @@ function Card({ children }: { children: React.ReactNode }) {
 function MiniCard({
   title,
   note,
+  action,
   children,
 }: {
   title: string;
   note: string;
+  /** An optional way out of the card — a link to the page that holds the full version. */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col rounded-sm border border-border bg-card p-4">
-      <h3 className="text-sm text-fg">{title}</h3>
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm text-fg">{title}</h3>
+        {action}
+      </div>
       <p className="mt-0.5 mb-3 text-[11px] text-muted/60">{note}</p>
       {children}
     </div>

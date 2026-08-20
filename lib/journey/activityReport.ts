@@ -123,7 +123,57 @@ export interface SectionHeatmap {
   samples: number;
   /** Total cursor-observed time across every visit, in ms. The denominator a reader actually feels. */
   observedMs: number;
+  /**
+   * WHICH LAYOUT THIS PICTURE BELONGS TO, and why the grouping key gained a third part in v4.
+   *
+   * Cells are normalised to each visitor's own viewport, so the middle cell is "the middle of the
+   * frame" on every screen — but the site renders a DIFFERENT LAYOUT below 51.25em, so the middle of
+   * the frame holds different things on either side of that line. Summing them produced one picture
+   * of two layouts, and any reference frame drawn under it was wrong for half the data.
+   *
+   * "unknown" is every row written before v4. They are not wrong, they are older than the question.
+   */
+  layout: HeatmapLayout;
+  /**
+   * ⚠ TRUE WHEN THE LAYOUT WAS RECOVERED RATHER THAN MEASURED.
+   *
+   * A grid written before v4 recorded no viewport, but its SESSION very often still has a
+   * `device:profile` event carrying one — so the shape is recoverable instead of lost. What cannot
+   * be recovered is the browser's own answer to an `em` media query, so the narrow/wide split is
+   * re-derived from pixels against `INFERRED_NARROW_MAX_PX`, which is an approximation. Every
+   * surface that draws a frame off an inferred layout has to say that it did.
+   */
+  isLayoutInferred: boolean;
+  /**
+   * The actual screens behind this picture, biggest contributor first.
+   *
+   * ⚠ THIS IS WHAT LETS THE MIMIC BE DRAWN AT THE RIGHT SHAPE. A heatmap cell is a fraction of the
+   * visitor's own viewport, so the grid itself is aspect-independent — but any reference frame drawn
+   * under it is NOT. Forcing a 16:9 box for a reader whose visitors were all on 16:10 laptops puts
+   * every region a few percent off, in the one direction nobody would think to check.
+   *
+   * ⚠ It does NOT split the heatmap. Grouping by exact pixel size would shatter the data into a card
+   * per monitor; the sizes are carried so the frame can be shaped and the spread can be stated.
+   */
+  viewports: ViewportShape[];
 }
+
+/** One distinct screen size that contributed to a heatmap. */
+export interface ViewportShape {
+  width: number;
+  height: number;
+  /** How many section-summaries came from a screen this size. */
+  grids: number;
+}
+
+/**
+ * THE SITE'S OWN CLASSES, not sizes invented here.
+ *
+ * "wide" and "narrow" are the two sides of (max-width: 51.25em) as the VISITOR'S BROWSER answered
+ * it, carried on the grid. Nothing in this panel re-derives them from a pixel width, because that
+ * query is in em and moves with the visitor's root font size.
+ */
+export type HeatmapLayout = "wide" | "narrow" | "unknown";
 
 /** One point on the visits-over-time chart. */
 export interface VisitPoint {
@@ -467,6 +517,58 @@ function formatBucket(date: Date, bucket: ActivityWindow["bucket"]): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+/**
+ * ⚠ The narrow breakpoint expressed in PIXELS, for recovered rows only.
+ *
+ * The site's real breakpoint is `(max-width: 51.25em)`, which at a default 16px root is 820px — but
+ * `em` moves with the reader's font size, so this is an approximation and never the measurement. A
+ * v4+ grid carries the browser's own answer and never reaches this constant.
+ */
+const INFERRED_NARROW_MAX_PX = 820;
+
+interface RecoveredViewport {
+  width: number;
+  height: number;
+}
+
+/**
+ * Put a screen size back on grids that were recorded before v4 captured one.
+ *
+ * ⚠ THE DATA IS NOT LOST, IT IS JUST ON A DIFFERENT ROW. `device:profile` has carried
+ * `viewportWidth`/`viewportHeight` since the taxonomy existed, once per session — so a pre-v4 grid
+ * can borrow its own session's answer. Measured when this was written: 65 orphaned grids across 11
+ * sessions, 12 of which had a profile with a viewport. Without this the dominant case on any panel
+ * with history is "no reference frame can be drawn", which is true and useless.
+ *
+ * ⚠ It is a BORROW, not a measurement. The profile is stamped once per session while a grid is per
+ * section, so a visitor who resized mid-visit gets the profile's shape for every section. That is
+ * why everything resolved this way is flagged `isLayoutInferred` and labelled in the UI.
+ */
+async function recoverViewports(
+  grids: { sessionId: string; viewportWidth: number | null }[],
+): Promise<Map<string, RecoveredViewport>> {
+  const orphaned = [...new Set(grids.filter((g) => g.viewportWidth === null).map((g) => g.sessionId))];
+  if (orphaned.length === 0) return new Map();
+
+  const profiles = await prisma.journeyEvent.findMany({
+    where: { name: "device:profile", sessionId: { in: orphaned } },
+    select: { sessionId: true, detail: true },
+  });
+
+  const recovered = new Map<string, RecoveredViewport>();
+  for (const profile of profiles) {
+    const detail = (profile.detail ?? {}) as Record<string, unknown>;
+    const width = Number(detail.viewportWidth);
+    const height = Number(detail.viewportHeight);
+    // A profile from a coarse-pointer device cannot have produced a grid, so anything odd is skipped
+    // rather than trusted — a bad shape here would misdraw the frame for a whole session.
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) continue;
+    recovered.set(profile.sessionId, { width, height });
+  }
+
+  return recovered;
+}
+
 async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatmap[]> {
   const grids = await prisma.journeyCursorGrid.findMany({
     where: {
@@ -474,12 +576,23 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
         ? { gte: receivedAt.gte, lte: receivedAt.lte }
         : { lte: receivedAt.lte },
     },
-    select: { section: true, route: true, cells: true, sessionId: true, observedMs: true },
+    select: {
+      section: true,
+      route: true,
+      cells: true,
+      sessionId: true,
+      observedMs: true,
+      viewportWidth: true,
+      viewportHeight: true,
+      isNarrowLayout: true,
+    },
     // A ceiling rather than a page: this is summed into at most 576 numbers per section, and reading
     // every grid ever recorded to draw the same picture is how a dashboard becomes the slow page.
     take: 5000,
     orderBy: { receivedAt: "desc" },
   });
+
+  const recovered = await recoverViewports(grids);
 
   // ⚠ KEYED ON ROUTE AND SECTION TOGETHER. A section key is only unique within its own route — `/`
   // and `/lite` both have a `contact`, and a document route's stations are its own entirely — so
@@ -490,9 +603,12 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
     {
       route: string;
       section: string;
+      layout: HeatmapLayout;
+      isLayoutInferred: boolean;
       totals: Map<number, number>;
       sessions: Set<string>;
       observedMs: number;
+      viewports: Map<string, ViewportShape>;
     }
   >();
 
@@ -501,16 +617,45 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
     // treat this whole file as binary — `git diff` refused to show it, so 517 lines of report
     // logic were unreviewable — and any editor that strips control characters would silently
     // turn the delimiter into an empty string, collapsing `/a` + `b` and `/ab` + `` into one key.
-    const groupKey = `${grid.route}\u0000${grid.section}`;
+    //
+    // ⚠ THE LAYOUT IS THE THIRD PART OF THE KEY, added v4. Two layouts summed into one picture
+    // cannot be un-summed, and any reference frame drawn under the result is wrong for whichever
+    // half of the data it does not match.
+    // ⚠ The grid's OWN answer wins; the recovered one only fills a hole. A v5 grid measured its
+    // layout with `matchMedia`, which is the only correct way to answer an `em` media query.
+    const fallback = grid.viewportWidth === null ? recovered.get(grid.sessionId) : undefined;
+    const width = grid.viewportWidth ?? fallback?.width ?? null;
+    const height = grid.viewportHeight ?? fallback?.height ?? null;
+    const isNarrow =
+      grid.isNarrowLayout ??
+      // ⚠ INFERRED, and only ever for a row that recorded nothing. Comparing pixels to 820 is the
+      // approximation `NARROW_QUERY` exists to avoid — the breakpoint is in `em` and moves with the
+      // reader's font size — so anything resolved this way is flagged and the UI says so.
+      (fallback ? fallback.width <= INFERRED_NARROW_MAX_PX : null);
+
+    const layout: HeatmapLayout = isNarrow === null ? "unknown" : isNarrow ? "narrow" : "wide";
+    const isLayoutInferred = grid.isNarrowLayout === null && isNarrow !== null;
+    const groupKey = `${grid.route}\u0000${grid.section}\u0000${layout}`;
     const entry = bySection.get(groupKey) ?? {
       route: grid.route,
       section: grid.section,
+      layout,
+      isLayoutInferred,
       totals: new Map(),
       sessions: new Set(),
       observedMs: 0,
+      // Keyed by "WxH" so the same monitor seen twenty times is one row with a count of twenty.
+      viewports: new Map<string, ViewportShape>(),
     };
     entry.sessions.add(grid.sessionId);
     entry.observedMs += grid.observedMs;
+    if (width && height) {
+      const key = `${width}x${height}`;
+      const seen = entry.viewports.get(key);
+      if (seen) seen.grids += 1;
+      else
+        entry.viewports.set(key, { width, height, grids: 1 });
+    }
 
     // `cells` is JSON, so its keys are strings and its values are unknown until checked.
     for (const [cell, count] of Object.entries((grid.cells ?? {}) as Record<string, unknown>)) {
@@ -533,6 +678,11 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
       return {
         section: entry.section,
         route: entry.route,
+        layout: entry.layout,
+        isLayoutInferred: entry.isLayoutInferred,
+        // ⚠ Sorted by contribution, because the frame is drawn at the FIRST one — the shape most of
+        // this data actually came from, not whichever screen happened to sort first.
+        viewports: [...entry.viewports.values()].sort((left, right) => right.grids - left.grids),
         sessions: entry.sessions.size,
         samples,
         observedMs: entry.observedMs,

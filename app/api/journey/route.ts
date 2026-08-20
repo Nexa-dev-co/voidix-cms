@@ -149,6 +149,13 @@ export async function POST(request: Request) {
           section: grid.section,
           cells: grid.cells,
           observedMs: grid.observedMs,
+          // ⚠ `?? null` rather than letting `undefined` through. These are optional in the schema on
+          // purpose (see `cursorGridSchema`), and Prisma treats an absent key and an explicit null
+          // differently on some paths — being explicit is what keeps a pre-v4 grid a stored row with
+          // unknown shape rather than a rejected insert that takes the whole transaction down.
+          viewportWidth: grid.viewportWidth ?? null,
+          viewportHeight: grid.viewportHeight ?? null,
+          isNarrowLayout: grid.isNarrowLayout ?? null,
         })),
       }),
       prisma.journeyCursorPath.createMany({ data: storablePaths }),

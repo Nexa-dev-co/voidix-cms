@@ -1272,12 +1272,28 @@ model JourneyCursorGrid {
   /// How long the cursor was observed here. The denominator — without it a long visit just looks hot.
   observedMs Int     @map("observed_ms")
 
+  /// ⚠ THE SHAPE OF THE SCREEN THIS WAS GATHERED ON — added v4, and NULLABLE because every row
+  /// written before v4 has no answer. Cells are normalised to the visitor's own viewport, so
+  /// without this a 21:9 ultrawide, a 16:10 laptop and a half-screen 960px window all sum into one
+  /// picture whose middle cell means something different in each. They are three different LAYOUTS.
+  ///
+  /// ⚠ This is NOT a phone-versus-desktop split. Cursor tracking gates on `(pointer: fine)`, so a
+  /// phone never appears in this table at all — every row here already has a mouse. The split that
+  /// matters is a narrow WINDOW on a desktop, which gets the site's narrow layout.
+  viewportWidth  Int?    @map("viewport_width")  @db.SmallInt
+  viewportHeight Int?    @map("viewport_height") @db.SmallInt
+  /// ⚠ The browser's own answer to `(max-width: 51.25em)`, recorded at collection time. NEVER
+  /// re-derive this from `viewportWidth`: the query is in `em`, so it resolves against the visitor's
+  /// root font size and a reader with large text crosses it at a width that is not 820px.
+  isNarrowLayout Boolean? @map("is_narrow_layout")
+
   receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
 
   /// Retention sweeps by this, exactly as the event table does.
   @@index([receivedAt])
-  /// The heatmap query: one section, over a window.
-  @@index([route, section, receivedAt])
+  /// The heatmap query: one section, over a window. ⚠ `isNarrowLayout` joins it because the heatmap
+  /// is now grouped by layout — one picture per layout class, never one picture across both.
+  @@index([route, section, isNarrowLayout, receivedAt])
   @@map("journey_cursor_grids")
 }
 

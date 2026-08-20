@@ -23,10 +23,44 @@ import { buildActivityHref, type ActivityParams } from "@/lib/journey/activityVi
  * bookmark, middle-click and go back from, and only the two date inputs need JavaScript. Both write
  * to the URL, so any view here is shareable and survives a refresh.
  */
-export default function ActivityFilters({ params }: { params: ActivityParams }) {
+export default function ActivityFilters({
+  params,
+  basePath,
+  extraQuery,
+}: {
+  params: ActivityParams;
+  /**
+   * ⚠ WHERE A PERIOD LINK SHOULD LAND. Defaults to the overview, which is right for the overview and
+   * WRONG for every sub-page — and getting that wrong is the exact bug this file's header is about:
+   * `/reports`' builder was hard-coded, so this page's period controls used to navigate the reader to
+   * the leads report. The sub-pages hit the same trap one level down, sending anyone who changed the
+   * period from `/user-activity/attention` back to the overview with their filters discarded.
+   */
+  basePath?: string;
+  /**
+   * The sub-page's own state, carried across a period change so it survives.
+   *
+   * ⚠ A plain object and not a builder function, because this is a Client Component: a function prop
+   * cannot cross the server/client boundary, so the caller hands over serialisable state instead.
+   */
+  extraQuery?: Record<string, string>;
+}) {
   const router = useRouter();
   const isCustom = params.period === "custom";
   const today = formatIsoDate(new Date());
+
+  const hrefFor = (override: Partial<ActivityParams>) => {
+    const base = buildActivityHref(params, override, basePath);
+    if (!extraQuery || Object.keys(extraQuery).length === 0) return base;
+
+    const [path, existing] = base.split("?");
+    const query = new URLSearchParams(existing ?? "");
+    for (const [key, value] of Object.entries(extraQuery)) {
+      if (value) query.set(key, value);
+    }
+
+    return `${path}?${query.toString()}`;
+  };
 
   const goCustom = (next: Partial<ActivityParams>) => {
     const merged = { ...params, ...next };
@@ -34,7 +68,7 @@ export default function ActivityFilters({ params }: { params: ActivityParams }) 
     // ⚠ Both ends are needed before this means anything. Navigating on the first one would reload the
     // page against a half-finished range and throw away the input that is still being filled in.
     if (!merged.from || !merged.to) return;
-    router.push(buildActivityHref(merged, { period: "custom" }));
+    router.push(hrefFor({ ...next, period: "custom" }));
   };
 
   return (
@@ -46,7 +80,7 @@ export default function ActivityFilters({ params }: { params: ActivityParams }) 
           return (
             <Link
               key={key}
-              href={buildActivityHref(params, { period: key })}
+              href={hrefFor({ period: key })}
               aria-current={isActive ? "page" : undefined}
               className={`rounded-sm px-2.5 py-1.5 text-xs transition-colors duration-150 ${
                 isActive ? "bg-card text-fg" : "text-muted hover:bg-card/50 hover:text-fg"

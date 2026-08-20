@@ -14,8 +14,15 @@ import { z } from "zod";
  * dropping it — a partial row still looks like data and will be counted by something later.
  */
 
-/** Must equal the site's `JOURNEY_SCHEMA_VERSION`. */
-export const SUPPORTED_SCHEMA_VERSION = 2;
+/**
+ * Must equal the site's `JOURNEY_SCHEMA_VERSION`.
+ *
+ * ⚠ v3 added `section`, `carousel` and `stopIndex` to the two cursor events; v4 added the viewport
+ * shape to a cursor GRID. The event fields need no validation here — `.passthrough()` carries unknown
+ * keys — but the grid is a modelled shape, so v4 is below. The check is an EQUALITY, so the two repos
+ * must deploy together: a site on v4 against a panel on v3 has every batch rejected, silently.
+ */
+export const SUPPORTED_SCHEMA_VERSION = 5;
 
 /**
  * ⚠ Must equal `CURSOR_GRID_COLUMNS` / `CURSOR_GRID_ROWS` in the site's `lib/journey/events.ts`.
@@ -58,7 +65,32 @@ const cursorGridSchema = z.object({
   section: z.string().min(1).max(32),
   // Sparse map of cell index → count. Keys arrive as strings because that is what JSON objects are.
   cells: z.record(z.string(), z.number().int().nonnegative()),
+  /**
+   * ⚠ ACTIVE time as of v5, not the wall clock the section was open for. The shape is unchanged, so
+   * nothing here can detect the difference — the version is the only thing that can, which is why it
+   * moved for a change that adds no field.
+   */
   observedMs: z.number().int().nonnegative(),
+
+  /**
+   * The shape of the screen this grid was gathered on — v4.
+   *
+   * ⚠ OPTIONAL, EVEN THOUGH A v4 SITE ALWAYS SENDS THEM. The version check above already guarantees
+   * the sender is v4, so these could be required — and requiring them would mean any future code path
+   * that builds a grid without them takes the WHOLE BATCH down, events included. The cost of optional
+   * is three nullable columns; the cost of required is a silent total loss. Take the columns.
+   *
+   * ⚠ Bounded. These are numbers from a browser the visitor controls, and they land in `Int` columns —
+   * an absurd value is a failed insert that takes its transaction with it.
+   */
+  viewportWidth: z.number().int().positive().max(32_767).optional(),
+  viewportHeight: z.number().int().positive().max(32_767).optional(),
+  /**
+   * ⚠ The SITE's answer, from the layout's own `em` media query — never re-derived from the width
+   * above. `(max-width: 51.25em)` moves with the visitor's root font size, so a reader with large
+   * text switches layout at a width that is not 820px, and only their browser knew that.
+   */
+  isNarrowLayout: z.boolean().optional(),
 });
 
 const cursorPathSchema = z.object({

@@ -1,6 +1,11 @@
+import Link from "next/link";
+
 import { humanise } from "@/lib/journey/sectionLabel";
 import { CURSOR_GRID_COLUMNS, CURSOR_GRID_ROWS } from "@/lib/journey/intakeSchema";
-import type { SectionHeatmap } from "@/lib/journey/activityReport";
+import type { HeatmapLayout, SectionHeatmap } from "@/lib/journey/activityReport";
+import { findSectionLayout } from "@/lib/journey/sectionLayouts";
+import SiteMimic from "@/app/(panel)/user-activity/SiteMimic";
+import { buildHeatmapHref } from "@/lib/journey/activityView";
 
 /**
  * Where the cursor rested in one section.
@@ -116,24 +121,42 @@ export default function CursorHeatmap({ heatmap }: { heatmap: SectionHeatmap }) 
   const cellCount = CURSOR_GRID_COLUMNS * CURSOR_GRID_ROWS;
   const isProvisional = heatmap.sessions < CONFIDENT_SESSIONS;
   const visitWord = heatmap.sessions === 1 ? "visit" : "visits";
+  const layout = findSectionLayout(heatmap.section, heatmap.route, heatmap.layout);
+  // ⚠ THE SHAPE OF THE SCREEN THIS CAME FROM, not a hard-coded 16:9. `viewports` is sorted by
+  // contribution, so [0] is the screen most of these cells were gathered on. Falling back to the
+  // grid's own 32:18 only when nothing was recorded — a pre-v4 picture has nothing better to offer.
+  const dominant = heatmap.viewports[0];
+  const frameAspect = dominant
+    ? `${dominant.width} / ${dominant.height}`
+    : `${CURSOR_GRID_COLUMNS} / ${CURSOR_GRID_ROWS}`;
 
   return (
     <figure className="flex flex-col gap-2">
       <figcaption className="flex items-baseline justify-between gap-4">
         {/* ⚠ Humanised, not `capitalize`. A document route's section key is a DOM id — `the-studio`
             — and a CSS transform cannot turn a hyphen into a space, so the raw id was being shown. */}
-        <span className="text-sm text-fg">{humanise(heatmap.section)}</span>
-        <span className="text-[11px] tabular-nums text-muted">
-          {heatmap.sessions} {visitWord} · {formatDuration(heatmap.observedMs)} watched
+        <span className="flex min-w-0 items-baseline gap-2">
+          <Link
+            href={buildHeatmapHref(heatmap.route, heatmap.section, heatmap.layout)}
+            className="truncate text-sm text-fg underline-offset-4 hover:underline"
+          >
+            {humanise(heatmap.section)}
+          </Link>
+          <LayoutBadge layout={heatmap.layout} isInferred={heatmap.isLayoutInferred} />
+        </span>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted">
+          {heatmap.sessions} {visitWord}
+          {dominant ? ` · ${dominant.width}×${dominant.height}` : ""} ·{" "}
+          {formatDuration(heatmap.observedMs)} active
         </span>
       </figcaption>
 
       <div
-        className="relative w-full overflow-hidden rounded-sm border border-border bg-bg"
+        className="relative w-full overflow-hidden rounded-sm border border-border"
         style={{
           // The blur below is sized in `cqw`, which needs an inline-size container to resolve against.
           containerType: "inline-size",
-          aspectRatio: `${CURSOR_GRID_COLUMNS} / ${CURSOR_GRID_ROWS}`,
+          aspectRatio: frameAspect,
         }}
         role="img"
         aria-label={
@@ -142,6 +165,10 @@ export default function CursorHeatmap({ heatmap }: { heatmap: SectionHeatmap }) 
           "Normalised to this section's own busiest spot."
         }
       >
+        {/* ⚠ FIRST, so everything else paints over it. The mimic is the substrate the heat sits on,
+            not an overlay — drawn last it would hide the very measurement it exists to locate. */}
+        {layout && <SiteMimic layout={layout} showText={false} />}
+
         {/* ⚠ Its OWN layer, because the blur must not touch the reference marks over it — a blurred
             grid line is just a smear, and the marks are the thing that makes the blur readable. */}
         <div
@@ -175,6 +202,36 @@ export default function CursorHeatmap({ heatmap }: { heatmap: SectionHeatmap }) 
         )}
       </div>
     </figure>
+  );
+}
+
+/**
+ * Which layout this picture was gathered on.
+ *
+ * ⚠ `unknown` is shown rather than hidden. Every row recorded before v4 lands there, and a reader
+ * who is not told will assume the panel is confident about a frame it cannot place.
+ */
+function LayoutBadge({ layout, isInferred }: { layout: HeatmapLayout; isInferred: boolean }) {
+  const copy = {
+    wide: { label: "Wide", title: "Gathered on the wide layout, above 51.25em" },
+    narrow: { label: "Narrow", title: "Gathered on the narrow layout — no reference frame is authored for it yet" },
+    unknown: { label: "Unrecorded", title: "Recorded before the viewport was captured, and its session left no device profile to recover one from" },
+  } as const;
+
+  return (
+    <span
+      title={
+        isInferred
+          ? "Recovered from this session's device profile rather than measured — the frame is approximate"
+          : copy[layout].title
+      }
+      className="shrink-0 rounded-full border border-border px-1.5 py-px text-[9px] text-muted"
+    >
+      {/* ⚠ A recovered layout is marked, always. It was borrowed from a once-per-session event, so
+          it cannot be presented with the same confidence as one the browser answered directly. */}
+      {copy[layout].label}
+      {isInferred ? " ~" : ""}
+    </span>
   );
 }
 
