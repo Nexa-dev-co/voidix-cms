@@ -111,6 +111,18 @@ export interface SectionHeatmap {
   route: string;
   cells: HeatmapCell[];
   sessions: number;
+  /**
+   * ⚠ THE WEIGHT BEHIND THE PICTURE, and it is carried because `intensity` deliberately destroys it.
+   *
+   * Every cell is normalised against its own section's hottest, so a heatmap built from ONE visit
+   * and one built from four hundred are drawn with exactly the same confidence — a single cursor
+   * resting once becomes a full-strength cell. That is the right call for reading shape and a
+   * terrible one for judging whether the shape means anything, so the raw totals travel alongside
+   * and the component refuses to draw a confident picture without them.
+   */
+  samples: number;
+  /** Total cursor-observed time across every visit, in ms. The denominator a reader actually feels. */
+  observedMs: number;
 }
 
 /** One point on the visits-over-time chart. */
@@ -462,7 +474,7 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
         ? { gte: receivedAt.gte, lte: receivedAt.lte }
         : { lte: receivedAt.lte },
     },
-    select: { section: true, route: true, cells: true, sessionId: true },
+    select: { section: true, route: true, cells: true, sessionId: true, observedMs: true },
     // A ceiling rather than a page: this is summed into at most 576 numbers per section, and reading
     // every grid ever recorded to draw the same picture is how a dashboard becomes the slow page.
     take: 5000,
@@ -475,18 +487,30 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
   // name that described neither of them.
   const bySection = new Map<
     string,
-    { route: string; section: string; totals: Map<number, number>; sessions: Set<string> }
+    {
+      route: string;
+      section: string;
+      totals: Map<number, number>;
+      sessions: Set<string>;
+      observedMs: number;
+    }
   >();
 
   for (const grid of grids) {
-    const groupKey = `${grid.route} ${grid.section}`;
+    // ⚠ `\u0000` as an ESCAPE, never the raw byte. A literal NUL in the source made git
+    // treat this whole file as binary — `git diff` refused to show it, so 517 lines of report
+    // logic were unreviewable — and any editor that strips control characters would silently
+    // turn the delimiter into an empty string, collapsing `/a` + `b` and `/ab` + `` into one key.
+    const groupKey = `${grid.route}\u0000${grid.section}`;
     const entry = bySection.get(groupKey) ?? {
       route: grid.route,
       section: grid.section,
       totals: new Map(),
       sessions: new Set(),
+      observedMs: 0,
     };
     entry.sessions.add(grid.sessionId);
+    entry.observedMs += grid.observedMs;
 
     // `cells` is JSON, so its keys are strings and its values are unknown until checked.
     for (const [cell, count] of Object.entries((grid.cells ?? {}) as Record<string, unknown>)) {
@@ -502,10 +526,16 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
   return [...bySection.values()]
     .map((entry) => {
       const hottest = Math.max(...entry.totals.values(), 1);
+      // ⚠ Summed BEFORE the 0.05 filter below, so it counts every sample taken rather than every
+      // sample drawn. The question it answers is "how much cursor is behind this picture", and a
+      // faint cell that was dropped for being a pass-through is still evidence that was gathered.
+      const samples = [...entry.totals.values()].reduce((total, count) => total + count, 0);
       return {
         section: entry.section,
         route: entry.route,
         sessions: entry.sessions.size,
+        samples,
+        observedMs: entry.observedMs,
         cells: [...entry.totals.entries()]
           .map(([cell, total]) => ({ cell, intensity: total / hottest }))
           // Below this a cell is a cursor passing through on its way somewhere, and drawing it turns

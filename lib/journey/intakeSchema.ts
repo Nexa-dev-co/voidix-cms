@@ -15,7 +15,7 @@ import { z } from "zod";
  */
 
 /** Must equal the site's `JOURNEY_SCHEMA_VERSION`. */
-export const SUPPORTED_SCHEMA_VERSION = 1;
+export const SUPPORTED_SCHEMA_VERSION = 2;
 
 /**
  * ⚠ Must equal `CURSOR_GRID_COLUMNS` / `CURSOR_GRID_ROWS` in the site's `lib/journey/events.ts`.
@@ -72,6 +72,19 @@ const cursorPathSchema = z.object({
 
 export const journeyBatchSchema = z.object({
   schemaVersion: z.number().int(),
+  /**
+   * ⚠ THE BATCH OWNS THE SESSION ID — v2. It used to be read off `events[0]`, which held only
+   * while a flush was a single body. The site splits a flush on BYTES, packing events first, so
+   * every body after the first carries cursor payloads and no event at all; a client-side
+   * navigation likewise flushes a lone grid with no event beside it. Both arrived unattributable
+   * and every grid and path in them was dropped here, silently, behind a `console.warn`.
+   */
+  sessionId: z.string().uuid(),
+  /**
+   * ⚠ Optional, and its absence is what keeps `journey_cursor_paths.visitor_id` honest — a batch
+   * with no consented visitor cannot store a path, because there is nothing to attribute it to.
+   */
+  visitorId: z.string().uuid().optional(),
   events: z.array(eventSchema).max(200),
   cursorGrids: z.array(cursorGridSchema).max(40).optional(),
   cursorPaths: z.array(cursorPathSchema).max(40).optional(),

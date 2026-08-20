@@ -10,7 +10,12 @@ import {
   type ActivityWindow,
 } from "@/lib/journey/activityWindow";
 import { parseActivityParams } from "@/lib/journey/activityView";
-import { humanise } from "@/lib/journey/sectionLabel";
+import {
+  humanise,
+  describeTargetLabel,
+  routeLabel,
+  deviceTierLabel,
+} from "@/lib/journey/sectionLabel";
 
 /**
  * User activity — what visitors actually do on the website.
@@ -278,7 +283,7 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
         {report.friction.length > 0 && (
           <MiniCard
             title="Clicks that went nowhere"
-            note="Dead = hit nothing interactive. Rage = three or more, fast, in one spot."
+            note="Dead = hit nothing interactive. Rage = three or more, fast, in one spot. A greyed name is one the site has not labelled yet."
           >
             <table className="w-full text-sm">
               <thead>
@@ -291,7 +296,9 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
               <tbody>
                 {report.friction.map((row) => (
                   <tr key={row.target} className="border-t border-border">
-                    <td className="py-1.5 pr-4 font-mono text-xs text-fg">{row.target}</td>
+                    <td className="py-1.5 pr-4 text-xs text-fg">
+                      <TargetName target={row.target} />
+                    </td>
                     <td className="py-1.5 text-right text-xs tabular-nums text-muted">
                       {row.deadClicks}
                     </td>
@@ -314,7 +321,9 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
             <ul className="flex flex-col gap-2">
               {report.attention.map((row) => (
                 <li key={row.target} className="flex items-baseline justify-between gap-4">
-                  <span className="truncate font-mono text-xs text-fg">{row.target}</span>
+                  <span className="min-w-0 truncate text-xs text-fg">
+                    <TargetName target={row.target} />
+                  </span>
                   <span className="flex shrink-0 items-baseline gap-3">
                     <span className="text-[11px] tabular-nums text-muted">{row.sessions} visits</span>
                     <span className="w-12 text-right text-xs tabular-nums text-fg">
@@ -333,7 +342,14 @@ function Detail({ report, phrase }: { report: ActivityReport; phrase: string }) 
               {report.devices.map((slice) => (
                 <li key={slice.tier} className="flex flex-col gap-1.5">
                   <div className="flex items-baseline justify-between gap-4">
-                    <span className="text-sm text-fg capitalize">{slice.tier}</span>
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="text-sm text-fg">{deviceTierLabel(slice.tier).name}</span>
+                      {deviceTierLabel(slice.tier).note && (
+                        <span className="truncate text-[10px] text-muted">
+                          {deviceTierLabel(slice.tier).note}
+                        </span>
+                      )}
+                    </span>
                     <span className="flex items-baseline gap-3">
                       <span className="text-[11px] tabular-nums text-muted">
                         {Math.round((slice.sessions / deviceTotal) * 100)}%
@@ -400,12 +416,18 @@ function Heatmaps({ report }: { report: ActivityReport }) {
   return (
     <Section
       title="Where the cursor rested"
-      note="Each one is normalised to its own busiest spot, so two cannot be compared for volume — the visit count under each is what compares them. Desktop only; a phone has no cursor."
+      note="Each frame is one visitor's screen, thirds marked. Brighter is longer. Each is normalised to its OWN busiest spot, so two cannot be compared for volume — the visits beside each are what compare them. Desktop only; a phone has no cursor."
     >
       <div className="flex flex-col gap-6">
         {routes.map((route) => (
           <div key={route} className="flex flex-col gap-3">
-            <h3 className="font-mono text-[11px] text-muted">{route}</h3>
+            {/* ⚠ A NAME FIRST, THE PATH SECOND. This was the raw route, so the homepage's heading
+                was a single "/" floating above a grid of cards — which reads as a stray character
+                rather than as the thing every card under it belongs to. */}
+            <h3 className="flex items-baseline gap-2">
+              <span className="text-sm text-fg">{routeLabel(route)}</span>
+              <span className="font-mono text-[11px] text-muted">{route}</span>
+            </h3>
             <div className="grid gap-6 lg:grid-cols-2">
               {report.heatmaps
                 .filter((heatmap) => heatmap.route === route)
@@ -419,6 +441,25 @@ function Heatmaps({ report }: { report: ActivityReport }) {
         ))}
       </div>
     </Section>
+  );
+}
+
+/**
+ * One `target` from the journey layer, as a name rather than a selector.
+ *
+ * ⚠ THE AUTHORED AND THE GUESSED ARE SET DIFFERENTLY, ON PURPOSE. A name the site supplied through
+ * `[data-journey]` is a fact; a name this panel derived from `button.enquiry-cta` is a guess at what
+ * a class meant, and the two should not read with equal authority. The guess is greyed and carries
+ * its element type, which is also the prompt to go and label that element properly.
+ */
+function TargetName({ target }: { target: string }) {
+  const { name, kind, isAuthored } = describeTargetLabel(target);
+
+  return (
+    <span className="inline-flex min-w-0 items-baseline gap-1.5">
+      <span className={`truncate ${isAuthored ? "text-fg" : "text-muted"}`}>{name}</span>
+      {kind && <span className="shrink-0 text-[10px] text-muted/60">{kind}</span>}
+    </span>
   );
 }
 

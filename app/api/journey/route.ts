@@ -83,37 +83,58 @@ export async function POST(request: Request) {
     return new NextResponse(null, { status: 204 });
   }
 
-  const { events, cursorGrids, cursorPaths } = parsed.data;
+  /**
+   * ⚠ `sessionId` AND `visitorId` COME FROM THE ENVELOPE, never from `events[0]`.
+   *
+   * They used to be read off the first event, which held only while a flush was a single body. The
+   * site splits a flush on BYTES and packs events first, so every body after the first carries
+   * cursor payloads and no event at all — and a client-side navigation flushes a lone grid with no
+   * event beside it. Both arrived unattributable and every grid and path in them was dropped here.
+   */
+  const { events, cursorGrids, cursorPaths, sessionId, visitorId: consentedVisitorId } = parsed.data;
 
   if (events.some(isTierMismatch)) {
     console.warn("[journey] rejected a batch: a tier 1 event carried a visitorId");
     return new NextResponse(null, { status: 204 });
   }
 
-  // ⚠ A path without a visitor id cannot be stored — `visitor_id` is NOT NULL on that table
-  // precisely so a path nobody consented to is unrepresentable. The site should never send one;
-  // if it does, the grids and events in the same batch are still perfectly good, so they are kept
-  // and only the paths are dropped.
-  const consentedVisitorId = events.find((event) => event.tier === 2)?.visitorId;
+  /**
+   * ⚠ An event may not claim a session the envelope does not. The envelope is what every cursor
+   * payload is filed under, so a batch mixing two session ids would silently file one visit's
+   * heatmap against another's — and unlike the tier check there is no column that would catch it
+   * later. It cannot happen from the site's own collector, which reads both from one place.
+   */
+  if (events.some((event) => event.sessionId !== sessionId)) {
+    console.warn("[journey] rejected a batch: an event disagreed with the envelope's sessionId");
+    return new NextResponse(null, { status: 204 });
+  }
 
   /**
-   * ⚠ The cursor payloads carry no session id of their own — they belong to the same visit as the
-   * events beside them, so the batch supplies it. A batch of cursor data with NO events has nothing
-   * to attribute it to, and `session_id` is a `uuid` column: sending an empty string there fails the
-   * insert, and because all three writes share one transaction it would take the events and grids
-   * down with it. So the absence is handled here rather than discovered by Postgres.
+   * ⚠ A path without a visitor id cannot be stored — `visitor_id` is NOT NULL on that table
+   * precisely so a path nobody consented to is unrepresentable. The site should never send one;
+   * if it does, the grids and events in the same batch are still perfectly good, so they are kept
+   * and only the paths are dropped.
    */
-  const sessionId = events[0]?.sessionId;
-
-  const storableGrids = sessionId ? (cursorGrids ?? []) : [];
-  const storablePaths = sessionId && consentedVisitorId ? (cursorPaths ?? []) : [];
+  const storableGrids = cursorGrids ?? [];
+  /**
+   * ⚠ The visitor id is bound to each row HERE, inside the branch that proves it exists, rather
+   * than asserted with a cast at the insert. `visitor_id` is the one NOT NULL identity column in
+   * this schema and the cast was the only thing standing between it and an undefined — narrowing
+   * costs nothing and makes the compiler enforce what the model note claims.
+   */
+  const storablePaths = consentedVisitorId
+    ? (cursorPaths ?? []).map((path: CursorPathInput) => ({
+        sessionId,
+        visitorId: consentedVisitorId,
+        route: path.route,
+        section: path.section,
+        points: path.points,
+        sampleHz: path.sampleHz,
+      }))
+    : [];
 
   if ((cursorPaths?.length ?? 0) > 0 && !consentedVisitorId) {
     console.warn("[journey] dropped cursor paths: the batch carried no consented visitor");
-  }
-
-  if (!sessionId && ((cursorGrids?.length ?? 0) > 0 || (cursorPaths?.length ?? 0) > 0)) {
-    console.warn("[journey] dropped cursor data: the batch carried no events to attribute it to");
   }
 
   try {
@@ -123,23 +144,14 @@ export async function POST(request: Request) {
       }),
       prisma.journeyCursorGrid.createMany({
         data: storableGrids.map((grid) => ({
-          sessionId: sessionId as string,
+          sessionId,
           route: grid.route,
           section: grid.section,
           cells: grid.cells,
           observedMs: grid.observedMs,
         })),
       }),
-      prisma.journeyCursorPath.createMany({
-        data: storablePaths.map((path: CursorPathInput) => ({
-          sessionId: sessionId as string,
-          visitorId: consentedVisitorId as string,
-          route: path.route,
-          section: path.section,
-          points: path.points,
-          sampleHz: path.sampleHz,
-        })),
-      }),
+      prisma.journeyCursorPath.createMany({ data: storablePaths }),
     ]);
   } catch (error) {
     console.warn(
