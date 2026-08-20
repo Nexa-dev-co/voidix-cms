@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import type { ReportWindow } from "@/lib/leads/reportPeriod";
+import type { ActivityWindow } from "@/lib/journey/activityWindow";
 
 /**
  * What visitors actually did on the website, read back out.
@@ -103,8 +103,21 @@ export interface HeatmapCell {
 
 export interface SectionHeatmap {
   section: string;
+  /**
+   * ⚠ CARRIED, AND GROUPED ON. Section keys are only unique WITHIN a route — `/` and `/lite` both
+   * have a `contact`, and a document route's stations are its own — so summing by section alone
+   * painted two pages' cursors into one picture under a name that belonged to neither.
+   */
+  route: string;
   cells: HeatmapCell[];
   sessions: number;
+}
+
+/** One point on the visits-over-time chart. */
+export interface VisitPoint {
+  /** Already formatted for the axis — the server owns the timezone, so the client cannot disagree. */
+  label: string;
+  visits: number;
 }
 
 export interface ActivityReport {
@@ -118,6 +131,8 @@ export interface ActivityReport {
   devices: DeviceSlice[];
   friction: FrictionRow[];
   heatmaps: SectionHeatmap[];
+  /** Visits per bucket across the window, oldest first. Empty for "all time" with no lower bound. */
+  trend: VisitPoint[];
   /** Rows in the whole table, ignoring the window. Distinguishes "no data yet" from "none this month". */
   totalEventsEver: number;
 }
@@ -138,7 +153,7 @@ const EMPTY_HEADLINE: ActivityHeadline = {
  * figure a human reads off this page is "how many visits", and the distinct count is what makes that
  * true rather than approximately true.
  */
-async function countSessionsByName(window: ReportWindow): Promise<Map<string, number>> {
+async function countSessionsByName(window: ActivityWindow): Promise<Map<string, number>> {
   const rows = await prisma.journeyEvent.findMany({
     where: window.from ? { receivedAt: { gte: window.from, lte: window.to } } : { receivedAt: { lte: window.to } },
     select: { name: true, sessionId: true },
@@ -150,7 +165,7 @@ async function countSessionsByName(window: ReportWindow): Promise<Map<string, nu
   return counts;
 }
 
-export async function buildActivityReport(window: ReportWindow): Promise<ActivityReport> {
+export async function buildActivityReport(window: ActivityWindow): Promise<ActivityReport> {
   const receivedAt = window.from
     ? { gte: window.from, lte: window.to }
     : { lte: window.to };
@@ -171,6 +186,7 @@ export async function buildActivityReport(window: ReportWindow): Promise<Activit
       devices: [],
       friction: [],
       heatmaps: [],
+      trend: [],
       totalEventsEver,
     };
   }
@@ -213,11 +229,12 @@ export async function buildActivityReport(window: ReportWindow): Promise<Activit
     };
   });
 
-  const [attention, devices, friction, heatmaps] = await Promise.all([
+  const [attention, devices, friction, heatmaps, trend] = await Promise.all([
     buildAttention(receivedAt),
     buildDevices(receivedAt),
     buildFriction(receivedAt),
     buildHeatmaps(receivedAt),
+    buildTrend(window),
   ]);
 
   const enquiryOpened = byName.get("enquiry:open") ?? 0;
@@ -242,6 +259,7 @@ export async function buildActivityReport(window: ReportWindow): Promise<Activit
     devices,
     friction,
     heatmaps,
+    trend,
     headline: {
       visits,
       completedIntro,
@@ -352,6 +370,91 @@ async function buildFriction(receivedAt: ReceivedAtFilter): Promise<FrictionRow[
  * question each heatmap answers is "where within THIS scene", not "which scene is busiest", which
  * the section funnel already answers properly.
  */
+/**
+ * Visits per bucket across the window, oldest first.
+ *
+ * ── ⚠ ONE ROW PER SESSION, NOT ONE PER EVENT ───────────────────────────────────────────────────
+ * A visit that browses thoroughly emits forty events and a visit that bounces emits three, so
+ * charting rows would draw engagement and label it traffic. `MIN(received_at)` per session is when
+ * that visit ARRIVED, which is the thing a traffic line is supposed to show.
+ *
+ * ⚠ Bucketed by `received_at`, like every other figure here — see the module header on why the
+ * browser's own clock is never allowed to decide which day something belongs to.
+ *
+ * ⚠ EMPTY BUCKETS ARE FILLED IN. Postgres returns no row for a day nobody visited, and a line chart
+ * fed only the days with traffic draws a straight segment across a gap — which reads as steady
+ * traffic through exactly the period that had none. The zero-fill is what makes the shape true.
+ */
+async function buildTrend(window: ActivityWindow): Promise<VisitPoint[]> {
+  // "All time" has no lower bound to start bucketing from, and a chart spanning an unknown range
+  // cannot pick a sensible bucket. The rest of the page still answers for all time.
+  if (!window.from) return [];
+
+  const from = window.from;
+  const to = window.to;
+
+  const rows = await prisma.$queryRaw<{ bucket: Date; visits: bigint }[]>`
+    SELECT date_trunc(${window.bucket}, first_seen) AS bucket, COUNT(*)::bigint AS visits
+      FROM (
+        SELECT session_id, MIN(received_at) AS first_seen
+          FROM journey_events
+         WHERE received_at >= ${from} AND received_at <= ${to}
+         GROUP BY session_id
+      ) sessions
+     GROUP BY 1
+     ORDER BY 1
+  `;
+
+  const counts = new Map<number, number>();
+  for (const row of rows) counts.set(startOfBucket(row.bucket, window.bucket).getTime(), Number(row.visits));
+
+  const points: VisitPoint[] = [];
+  const cursor = startOfBucket(from, window.bucket);
+
+  // A guard rather than a `while (true)`: a clock change or a bad custom range must not spin here.
+  const MAX_POINTS = 400;
+  while (cursor <= to && points.length < MAX_POINTS) {
+    points.push({
+      label: formatBucket(cursor, window.bucket),
+      visits: counts.get(cursor.getTime()) ?? 0,
+    });
+    advanceBucket(cursor, window.bucket);
+  }
+
+  return points;
+}
+
+/** ⚠ Must match `date_trunc`'s idea of a bucket start, or the zero-fill never finds its own rows. */
+function startOfBucket(date: Date, bucket: ActivityWindow["bucket"]): Date {
+  const start = new Date(date);
+  start.setMinutes(0, 0, 0);
+  if (bucket === "hour") return start;
+
+  start.setHours(0, 0, 0, 0);
+  if (bucket === "day") return start;
+
+  // Postgres weeks start on Monday; `getDay()` calls Sunday 0, so Sunday is six days into its week.
+  const daysFromMonday = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - daysFromMonday);
+
+  return start;
+}
+
+function advanceBucket(cursor: Date, bucket: ActivityWindow["bucket"]): void {
+  if (bucket === "hour") cursor.setHours(cursor.getHours() + 1);
+  else if (bucket === "day") cursor.setDate(cursor.getDate() + 1);
+  else cursor.setDate(cursor.getDate() + 7);
+}
+
+/** Formatted on the SERVER so the axis cannot disagree with the sentence above the chart. */
+function formatBucket(date: Date, bucket: ActivityWindow["bucket"]): string {
+  if (bucket === "hour") {
+    return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
 async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatmap[]> {
   const grids = await prisma.journeyCursorGrid.findMany({
     where: {
@@ -359,17 +462,30 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
         ? { gte: receivedAt.gte, lte: receivedAt.lte }
         : { lte: receivedAt.lte },
     },
-    select: { section: true, cells: true, sessionId: true },
+    select: { section: true, route: true, cells: true, sessionId: true },
     // A ceiling rather than a page: this is summed into at most 576 numbers per section, and reading
     // every grid ever recorded to draw the same picture is how a dashboard becomes the slow page.
     take: 5000,
     orderBy: { receivedAt: "desc" },
   });
 
-  const bySection = new Map<string, { totals: Map<number, number>; sessions: Set<string> }>();
+  // ⚠ KEYED ON ROUTE AND SECTION TOGETHER. A section key is only unique within its own route — `/`
+  // and `/lite` both have a `contact`, and a document route's stations are its own entirely — so
+  // grouping by section alone summed two different pages' cursors into one picture, labelled with a
+  // name that described neither of them.
+  const bySection = new Map<
+    string,
+    { route: string; section: string; totals: Map<number, number>; sessions: Set<string> }
+  >();
 
   for (const grid of grids) {
-    const entry = bySection.get(grid.section) ?? { totals: new Map(), sessions: new Set() };
+    const groupKey = `${grid.route} ${grid.section}`;
+    const entry = bySection.get(groupKey) ?? {
+      route: grid.route,
+      section: grid.section,
+      totals: new Map(),
+      sessions: new Set(),
+    };
     entry.sessions.add(grid.sessionId);
 
     // `cells` is JSON, so its keys are strings and its values are unknown until checked.
@@ -380,14 +496,15 @@ async function buildHeatmaps(receivedAt: ReceivedAtFilter): Promise<SectionHeatm
       entry.totals.set(index, (entry.totals.get(index) ?? 0) + value);
     }
 
-    bySection.set(grid.section, entry);
+    bySection.set(groupKey, entry);
   }
 
-  return [...bySection.entries()]
-    .map(([section, entry]) => {
+  return [...bySection.values()]
+    .map((entry) => {
       const hottest = Math.max(...entry.totals.values(), 1);
       return {
-        section,
+        section: entry.section,
+        route: entry.route,
         sessions: entry.sessions.size,
         cells: [...entry.totals.entries()]
           .map(([cell, total]) => ({ cell, intensity: total / hottest }))

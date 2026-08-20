@@ -1,3 +1,4 @@
+import { humanise } from "@/lib/journey/sectionLabel";
 import { CURSOR_GRID_COLUMNS, CURSOR_GRID_ROWS } from "@/lib/journey/intakeSchema";
 import type { SectionHeatmap } from "@/lib/journey/activityReport";
 
@@ -26,7 +27,9 @@ export default function CursorHeatmap({ heatmap }: { heatmap: SectionHeatmap }) 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-4">
-        <span className="text-sm capitalize text-fg">{heatmap.section}</span>
+        {/* ⚠ Humanised, not `capitalize`. A document route's section key is a DOM id — `the-studio`
+            — and a CSS transform cannot turn a hyphen into a space, so the raw id was being shown. */}
+        <span className="text-sm text-fg">{humanise(heatmap.section)}</span>
         <span className="text-[11px] tabular-nums text-muted">
           {heatmap.sessions} {heatmap.sessions === 1 ? "visit" : "visits"}
         </span>
