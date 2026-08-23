@@ -2,6 +2,9 @@
 
 import { useRef, useState } from "react";
 
+import MarkPreviewDialog, {
+  type MarkPreviewSubject,
+} from "@/app/(panel)/(content)/works/MarkPreviewDialog";
 import { FieldShell } from "@/components/ui/Field";
 import { inspectMarkSvg } from "@/lib/content/inspectMarkSvg";
 import {
@@ -35,15 +38,24 @@ import {
 type Verdict =
   | { kind: "empty" }
   | { kind: "checking" }
-  | { kind: "usable"; shapeCount: number; previewUri: string }
+  | { kind: "usable"; shapeCount: number; previewUri: string; source: string }
   | { kind: "refused"; reason: string };
 
 export function MarkUploadField({
   currentUrl,
+  projectId,
   error,
 }: {
   /** The mark already saved on this project, if any. */
   currentUrl?: string | null;
+  /**
+   * The project being edited, if it exists yet.
+   *
+   * Only the preview wants it, and only to read a mark back that is already in storage. Absent on
+   * the new-project form, where there is nothing stored to read and the file in the input is the
+   * whole truth.
+   */
+  projectId?: string;
   error?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +90,9 @@ export function MarkUploadField({
       // browser's secure static mode: no scripts, no external requests, nothing the file can reach.
       // Inlining the same bytes into the DOM would give an uploaded file the panel's own origin.
       previewUri: `data:${MARK_CONTENT_TYPE};utf8,${encodeURIComponent(source)}`,
+      // Kept so the 3D preview cuts the bytes in the input rather than fetching the SAVED mark —
+      // the whole point of previewing before saving is to see the file that has not been saved.
+      source,
     });
 
     // Choosing a replacement and asking for removal are contradictory; the file wins, silently,
@@ -87,6 +102,31 @@ export function MarkUploadField({
 
   const previewUri = verdict.kind === "usable" ? verdict.previewUri : null;
   const shownMark = previewUri ?? (isRemoving ? null : currentUrl);
+
+  /**
+   * What the preview should cut, decided when the button is pressed rather than on every render.
+   *
+   * The order is the same order the save takes: a chosen file beats a stored one, and asking for
+   * removal leaves the project on its initial. Anything else would preview a state that pressing
+   * save would not produce.
+   */
+  const previewSubject = (): MarkPreviewSubject => {
+    if (verdict.kind === "usable") return { kind: "source", source: verdict.source };
+    if (!isRemoving && projectId && currentUrl) return { kind: "project", projectId };
+    return { kind: "initial" };
+  };
+
+  /**
+   * The title as it stands in the form THIS FIELD IS IN, read at the moment of pressing.
+   *
+   * It only matters for a project with no mark, where the preview grows an initial — but that is
+   * exactly when an editor is most likely to be part-way through typing the name the letter comes
+   * from, and showing them the letter they had before the rename would be quietly wrong.
+   */
+  const projectTitle = (): string => {
+    const titleField = inputRef.current?.form?.elements.namedItem("title");
+    return titleField instanceof HTMLInputElement ? titleField.value : "";
+  };
 
   return (
     <FieldShell
@@ -117,6 +157,18 @@ export function MarkUploadField({
             onChange={handleFileChosen}
             className="w-full text-xs text-muted file:mr-3 file:rounded-sm file:border file:border-border file:bg-field file:px-3 file:py-1.5 file:text-xs file:text-fg hover:file:border-border-strong"
           />
+
+          <div className="flex items-center gap-2">
+            <MarkPreviewDialog
+              subject={previewSubject}
+              projectTitle={projectTitle}
+              triggerLabel="Preview the stone"
+              disabled={verdict.kind === "checking"}
+            />
+            <span className="text-[11px] text-muted/60">
+              Cuts it the way the site does, before you save.
+            </span>
+          </div>
 
           {verdict.kind === "checking" && (
             <p className="text-[11px] text-muted">Checking that one…</p>

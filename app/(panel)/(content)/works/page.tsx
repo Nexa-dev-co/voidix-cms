@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { moveProjectAction } from "@/app/(panel)/(content)/works/actions";
+import MarkPreviewDialog from "@/app/(panel)/(content)/works/MarkPreviewDialog";
 import { ButtonLink } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageHeaderNote } from "@/components/ui/PageHeaderNote";
@@ -78,6 +79,18 @@ export default async function WorksPage() {
                 ))}
               </div>
             </Link>
+
+            {/* Every project can be previewed, including the ones with no mark: what the site grows
+                for those is the initial, and being able to see it is the point of showing it. */}
+            <MarkPreviewDialog
+              subject={
+                project.markSvgUrl
+                  ? { kind: "project", projectId: project.id }
+                  : { kind: "initial" }
+              }
+              projectTitle={project.title}
+              triggerVariant="ghost"
+            />
 
             <ReorderControls
               id={project.id}

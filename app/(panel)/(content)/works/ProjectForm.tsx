@@ -103,6 +103,7 @@ export function ProjectForm({
 
       <MarkUploadField
         currentUrl={project?.markSvgUrl}
+        projectId={project?.id}
         error={state.fieldErrors[MARK_FILE_FIELD]}
       />
 

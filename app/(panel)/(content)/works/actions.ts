@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
-import { MARK_FILE_FIELD, MARK_REMOVE_FIELD } from "@/lib/content/markStorage";
+import {
+  markUrlPrefix,
+  MARK_FILE_FIELD,
+  MARK_MAX_BYTES,
+  MARK_REMOVE_FIELD,
+} from "@/lib/content/markStorage";
 import { deleteStoredMark, resolveMarkChange } from "@/lib/content/markUploads";
 import { planReorder, type MoveDirection } from "@/lib/content/reorder";
 import {
@@ -19,6 +24,14 @@ import { makeSlugUnique, slugify } from "@/lib/text/slugify";
 import { projectSchema } from "@/lib/validation/contentSchemas";
 
 const MARK_FIELDS = { fileField: MARK_FILE_FIELD, removeField: MARK_REMOVE_FIELD };
+
+/**
+ * How long the preview will wait for a stored mark.
+ *
+ * Short on purpose: an editor pressing Preview is standing there watching, and a mark that cannot
+ * be had in this long is better reported as "showing the initial" than as a spinner.
+ */
+const MARK_READ_TIMEOUT_MS = 5_000;
 
 function revalidateWorks(id?: string) {
   revalidatePath("/");
@@ -231,4 +244,62 @@ export async function moveProjectAction(formData: FormData) {
   );
 
   revalidateWorks();
+}
+
+/**
+ * The SVG text of a project's stored mark, for the preview to cut.
+ *
+ * ── ⚠ WHY THE BYTES COME BACK THROUGH THE SERVER ────────────────────────────────────────────────
+ * The panel could fetch the storage URL from the browser — it is a public bucket and the edit page
+ * already puts that URL in an `<img>`. This does not, for the same reason the site's
+ * `lib/cms/markSource.ts` does not: the fetch is then a cross-origin request whose success depends
+ * on Supabase's CORS headers staying as they are, and a preview that works until someone tightens a
+ * bucket setting is a preview nobody will trust. Server-side there is no CORS question to have.
+ *
+ * ⚠ The URL is re-derived from the row, and checked against `markUrlPrefix()` before anything is
+ * fetched. Nothing here trusts an id to name a location: `resolveMarkChange` is the only writer of
+ * that column and it only ever writes a URL it built itself, but "the writer validates it" is not a
+ * property this side can check. It FAILS CLOSED — an unrecognised prefix returns null and the
+ * preview shows the initial, which is a state an editor can see and explain.
+ *
+ * Returns null rather than throwing for every miss: no project, no mark, an unreachable object. The
+ * caller has one honest thing to show in all of those cases, and it is the initial.
+ */
+export async function readProjectMarkSource(projectId: string): Promise<string | null> {
+  await requireAdmin();
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { markSvgUrl: true },
+  });
+
+  if (!project?.markSvgUrl) {
+    return null;
+  }
+
+  if (!project.markSvgUrl.startsWith(markUrlPrefix())) {
+    console.warn("[marks] refusing to read a mark URL outside the configured storage prefix.");
+    return null;
+  }
+
+  try {
+    const response = await fetch(project.markSvgUrl, {
+      signal: AbortSignal.timeout(MARK_READ_TIMEOUT_MS),
+      // The bucket is public and the object is immutable — a new upload is a new path, never an
+      // overwrite — so anything cached is by construction still correct.
+      cache: "force-cache",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const source = await response.text();
+
+    // The cap is enforced on the way in as well; re-checked here because the object could predate a
+    // lowered limit, and because the preview parses every byte of it on the editor's main thread.
+    return new Blob([source]).size > MARK_MAX_BYTES ? null : source;
+  } catch {
+    return null;
+  }
 }

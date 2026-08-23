@@ -14,7 +14,9 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "db:bootstrap-admin": "tsx scripts/bootstrapAdmin.ts"
+    "db:bootstrap-admin": "tsx scripts/bootstrapAdmin.ts",
+    "marks:check-vendor": "tsx scripts/checkVendoredMarkPipeline.mts",
+    "marks:sync-vendor": "tsx scripts/syncVendoredMarkPipeline.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
