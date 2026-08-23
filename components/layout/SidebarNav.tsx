@@ -34,6 +34,12 @@ const OPERATIONS_ITEMS = [
   // Both roles: the page scopes itself through visibility.ts, so a salesperson opening it sees
   // their own pipeline rather than the team's.
   { href: "/reports", label: "Reports", adminOnly: false },
+  // What people do on the WEBSITE, as opposed to what the pipeline is doing — anonymous visitors,
+  // the loader they may not survive, how far they get. Next to Reports because both are read rather
+  // than edited, and separate from it because the two answer different questions for different
+  // people. Admin-only for the reason Inbox is: `journey_events` has no owner column, so
+  // `visibility.ts` has nothing to scope by and the role is the whole gate.
+  { href: "/user-activity", label: "User activity", adminOnly: true },
   { href: "/team", label: "Team", adminOnly: true },
   { href: "/settings", label: "Settings", adminOnly: true },
   { href: "/releases", label: "Releases", adminOnly: true },

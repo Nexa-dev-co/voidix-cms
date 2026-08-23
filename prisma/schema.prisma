@@ -1132,3 +1132,199 @@ model ContentRelease {
   @@index([publishedAt])
   @@map("content_releases")
 }
+
+/// ─────────────────────────────────────────────────────────────────────────────────────────────
+/// JOURNEY ANALYTICS
+///
+/// What visitors actually do on the site, in two tiers of consent. The site's `lib/journey/events.ts`
+/// is the other half of this contract and NOTHING ENFORCES THE PAIR — same hazard as the content
+/// payload, same rule: change one, change the other in the same sitting and bump the schema version.
+///
+/// ⚠ Two tables on purpose, with opposite lifetimes. `journey_events` is the raw stream and is
+/// DELETED after 90 days; `journey_daily` is the nightly rollup and is kept indefinitely. Trends
+/// survive, the per-visitor detail does not, and the raw table cannot grow without bound.
+/// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/// One thing a visitor did. Raw, high-volume, and on a 90-day clock.
+///
+/// ⚠ `visitorId` IS NULL FOR TIER 1 AND THAT IS THE PRIVACY GUARANTEE, not an optional field nobody
+/// got round to filling. A tier 1 row cannot be joined to a person because there is nothing to join
+/// on — the site never generates an identifier at all unless consent was given. Anything that
+/// backfills this column has broken what the privacy notice promises.
+///
+/// ⚠ `sessionId` is not a loophole: it is generated per browser tab, held only in memory and gone
+/// when the tab closes. It stitches one visit together and recognises nobody across two.
+model JourneyEvent {
+  id        String @id @default(uuid()) @db.Uuid
+  /// A `JourneyEventName` from the site's taxonomy. Kept as text rather than an enum so that a site
+  /// deployed ahead of a migration records its new event instead of failing the whole batch.
+  name      String @map("name") @db.VarChar(32)
+
+  /// ⚠ WHEN THE BROWSER SAYS IT HAPPENED, AND BROWSER CLOCKS LIE. Wrong timezone, wrong date, or
+  /// simply set by hand — this value is untrusted and must never be used to bucket a report by day.
+  /// It is here because it is the only thing that can order events WITHIN one session and give an
+  /// honest dwell time, which `receivedAt` cannot: a batch of ten events flushed together all arrive
+  /// in the same millisecond.
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+  /// ⚠ SERVER TRUTH, and what every report groups by. Set here, not by the client.
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  /// Per-tab, in-memory, never stored on the device. See the model note.
+  sessionId String  @map("session_id") @db.Uuid
+  /// ⚠ Tier 2 only. Null is the normal case and the privacy-preserving one.
+  visitorId String? @map("visitor_id") @db.Uuid
+  /// 1 = anonymous, everyone. 2 = consented. Stored rather than inferred from `visitorId` so the two
+  /// can be checked against each other; if they ever disagree that is a bug worth being able to see.
+  tier      Int     @db.SmallInt
+
+  /// The route only — no query string, no hash, nothing a visitor typed.
+  route     String  @map("route") @db.VarChar(64)
+  /// Promoted out of `detail` because the section funnel groups by it and a JSON path would be the
+  /// one hot query doing extra work. Null for events that belong to no section.
+  section   String? @map("section") @db.VarChar(32)
+  /// Everything else the event carries — depth, dwellMs, stopIndex, the device profile. Shapeless on
+  /// purpose: the site's discriminated union is the schema, and duplicating fourteen shapes as
+  /// columns here would mean a migration every time an event gains a field.
+  detail    Json?   @map("detail")
+
+  /// The site's `JOURNEY_SCHEMA_VERSION` at the time of sending.
+  schemaVersion Int @map("schema_version") @db.SmallInt
+
+  /// The retention sweep deletes by this, so it leads.
+  @@index([receivedAt])
+  /// Every funnel is "this event, over this window".
+  @@index([name, receivedAt])
+  /// Stitching one visit back together.
+  @@index([sessionId])
+  /// ⚠ Partial would be better (tier 2 is a minority of rows) but Prisma cannot express a WHERE on an
+  /// index; if this table gets large, replace it by hand in a migration.
+  @@index([visitorId])
+  @@map("journey_events")
+}
+
+/// The nightly rollup. Small, and kept forever.
+///
+/// ⚠ This is what makes "raw 90 days" survivable as a promise rather than a loss. Once a day the job
+/// folds the raw stream into counts and then deletes what it has counted; the shape of the site's
+/// traffic a year ago is still readable here long after the individual rows are gone.
+///
+/// ⚠ Bucketed by `receivedAt`, never `occurredAt` — see the warning on that column.
+model JourneyDaily {
+  id      String   @id @default(uuid()) @db.Uuid
+  /// The UTC day being summarised. Date, not timestamp: this is a bucket, not a moment.
+  day     DateTime @map("day") @db.Date
+  name    String   @map("name") @db.VarChar(32)
+  /// ⚠ NOT NULL HERE, UNLIKE `journey_events.section`, AND THE EMPTY STRING IS THE WHOLE REASON.
+  ///
+  /// This column is part of the unique key below, and Postgres treats NULLs in a UNIQUE index as
+  /// DISTINCT FROM ONE ANOTHER — so with a nullable column `(2026-08-17, 'intro:start', NULL)` can be
+  /// inserted twice over. The "a re-run updates rather than duplicates" guarantee this table rests on
+  /// would silently not hold: the nightly job would add a second row per day per event forever, and
+  /// every figure read off it would be wrong with no constraint anywhere to catch it.
+  ///
+  /// `''` means "this event belongs to no section". On the raw table NULL is the right choice, because
+  /// there the column is genuinely absent data rather than part of a grouping key.
+  section String   @default("") @map("section") @db.VarChar(32)
+
+  /// How many times it happened.
+  eventCount   Int @map("event_count")
+  /// How many distinct visits it happened in. Always <= eventCount.
+  sessionCount Int @map("session_count")
+  /// Distinct consented visitors. ⚠ Null rather than 0 when there were no tier 2 events at all —
+  /// "nobody consented" and "nobody was measured" are different facts and a 0 conflates them.
+  visitorCount Int? @map("visitor_count")
+
+  /// Only meaningful for `stop:dwell`. Median rather than mean: one tab left open overnight would
+  /// drag an average into fiction, and that is the normal case rather than the rare one.
+  medianDwellMs Int? @map("median_dwell_ms")
+
+  builtAt DateTime @default(now()) @map("built_at") @db.Timestamptz(6)
+
+  /// One row per day per event per section — so a re-run of the job updates rather than duplicates.
+  @@unique([day, name, section])
+  @@index([day])
+  @@map("journey_daily")
+}
+
+/// Where the cursor spent its time in one section — TIER 1, everybody.
+///
+/// ⚠ ONE ROW PER SECTION LEFT, NOT PER SAMPLE, and that is the only reason this table is affordable.
+/// `mousemove` fires at 60–120 Hz; a row per sample would be ~600 rows per minute per visitor against
+/// a `journey_events` table holding about fifteen rows for a whole visit. The browser accumulates the
+/// grid in memory and posts one summary when it leaves a section. Roughly 4,000 rows a month at a
+/// thousand visits, rather than 2.4 million.
+///
+/// ⚠ A CELL COUNT IS NOT A COORDINATE, which is what keeps this out of tier 2. There is no ordering,
+/// no path and no precision — two people who moved completely differently but rested in the same
+/// places produce identical rows. Mouse dynamics can identify a person; a histogram cannot.
+///
+/// ⚠ `section` IS NOT OPTIONAL. The homepage is one pinned viewport that four WebGL scenes take turns
+/// occupying, so a heatmap of "the page" is four scenes smeared on top of one another and means
+/// nothing. Every row is anchored to the scene it was gathered in.
+model JourneyCursorGrid {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  route     String   @map("route") @db.VarChar(64)
+  section   String   @map("section") @db.VarChar(32)
+
+  /// Sparse map of cell index → sample count. Most of the 32×18 grid is empty in any one section.
+  cells     Json     @map("cells")
+  /// How long the cursor was observed here. The denominator — without it a long visit just looks hot.
+  observedMs Int     @map("observed_ms")
+
+  /// ⚠ THE SHAPE OF THE SCREEN THIS WAS GATHERED ON — added v4, and NULLABLE because every row
+  /// written before v4 has no answer. Cells are normalised to the visitor's own viewport, so
+  /// without this a 21:9 ultrawide, a 16:10 laptop and a half-screen 960px window all sum into one
+  /// picture whose middle cell means something different in each. They are three different LAYOUTS.
+  ///
+  /// ⚠ This is NOT a phone-versus-desktop split. Cursor tracking gates on `(pointer: fine)`, so a
+  /// phone never appears in this table at all — every row here already has a mouse. The split that
+  /// matters is a narrow WINDOW on a desktop, which gets the site's narrow layout.
+  viewportWidth  Int?    @map("viewport_width")  @db.SmallInt
+  viewportHeight Int?    @map("viewport_height") @db.SmallInt
+  /// ⚠ The browser's own answer to `(max-width: 51.25em)`, recorded at collection time. NEVER
+  /// re-derive this from `viewportWidth`: the query is in `em`, so it resolves against the visitor's
+  /// root font size and a reader with large text crosses it at a width that is not 820px.
+  isNarrowLayout Boolean? @map("is_narrow_layout")
+
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  /// Retention sweeps by this, exactly as the event table does.
+  @@index([receivedAt])
+  /// The heatmap query: one section, over a window. ⚠ `isNarrowLayout` joins it because the heatmap
+  /// is now grouped by layout — one picture per layout class, never one picture across both.
+  @@index([route, section, isNarrowLayout, receivedAt])
+  @@map("journey_cursor_grids")
+}
+
+/// The actual cursor trail — ⚠ TIER 2 ONLY, AND THE MOST INVASIVE THING IN THIS SYSTEM.
+///
+/// ⚠ THIS IS SESSION REPLAY IN ALL BUT NAME. It is consent-gated because it genuinely requires
+/// consent, not as a formality: mouse dynamics — velocity, tremor, the shape of a correction — are an
+/// established behavioural biometric, so a stored path can identify a person in a way nothing else in
+/// this schema can. If the consent record for a session is ever withdrawn, THESE ROWS GO. Nothing
+/// else here has that property and nothing else here needs it.
+///
+/// ⚠ `visitor_id` is NOT NULL, unlike everywhere else in this schema, and that is the point: a path
+/// cannot exist without the consent that produced it. A null here would be a path nobody agreed to.
+model JourneyCursorPath {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  /// ⚠ Required. See the model note — this row may not exist without it.
+  visitorId String   @map("visitor_id") @db.Uuid
+  route     String   @map("route") @db.VarChar(64)
+  section   String   @map("section") @db.VarChar(32)
+
+  /// Delta-encoded, quantised: `[t, x, y, dt, dx, dy, …]`. Positions are per-thousand of the
+  /// viewport rather than pixels, so a path means the same thing on two different monitors.
+  points    Json     @map("points")
+  sampleHz  Int      @map("sample_hz") @db.SmallInt
+
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([receivedAt])
+  @@index([route, section, receivedAt])
+  /// Deleting everything belonging to one withdrawn visitor has to be one indexed statement.
+  @@index([visitorId])
+  @@map("journey_cursor_paths")
+}

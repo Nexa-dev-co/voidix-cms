@@ -25,6 +25,19 @@
    */
   --accent: #ff8a1a;
   /*
+   * ⚠ THE SAME AMBER AS A BARE TRIPLET, because `var()` cannot be sliced. Anything needing the
+   * accent at a VARYING alpha — one computed in JS rather than authored here — has to interpolate
+   * it into `rgb(… / a)`, and a hex cannot go in that slot.
+   *
+   * ⚠ IT MUST STAY IN STEP WITH `--accent` ABOVE, and nothing enforces that. It exists because the
+   * user-activity heatmap sets a per-cell alpha from measured intensity: it asked for
+   * `rgb(var(--accent-rgb) / …)` against a token that was never defined, every declaration was
+   * therefore invalid and dropped, and all 576 cells painted transparent. The dashboard drew three
+   * empty black rectangles over perfectly good data, which is the failure mode a missing custom
+   * property always has — silent, and indistinguishable from having nothing to show.
+   */
+  --accent-rgb: 255 138 26;
+  /*
    * Hairlines carry a breath of the star rather than neutral grey, so the panel's chrome reads
    * as LIT rather than as UI drawn on top of it — the site's reasoning, mirrored.
    *
@@ -32,12 +45,12 @@
    * it replaced, and what is held steady is the WEIGHT, not the number. This is the site's own
    * compensated value, copied verbatim.
    */
-  --border: rgba(255, 138, 26, 0.1);
+  --border: rgb(var(--accent-rgb) / 0.1);
   --card: #0d0d0d;
 
   /* Panel-only additions — the site has no forms, so it never needed these. */
   /* Twice `--border`'s alpha, the ratio it has always had; warmed by the same compensation. */
-  --border-strong: rgba(255, 138, 26, 0.2);
+  --border-strong: rgb(var(--accent-rgb) / 0.2);
   --field: #0a0a0a;
   /*
    * One step above the page, for a row under the cursor.
