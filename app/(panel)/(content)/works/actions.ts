@@ -48,6 +48,7 @@ function parseProjectForm(formData: FormData) {
     year: formData.get("year") ?? "",
     description: formData.get("description") ?? "",
     tags: formData.get("tags") ?? "",
+    liveUrl: formData.get("liveUrl") ?? "",
     disciplineId: formData.get("disciplineId") ?? "",
   });
 }
@@ -64,7 +65,7 @@ export async function createProjectAction(
     return formErrorFromZod(parsed.error);
   }
 
-  const { title, client, year, description, tags, disciplineId } = parsed.data;
+  const { title, client, year, description, tags, liveUrl, disciplineId } = parsed.data;
 
   const existingSlugs = await prisma.project.findMany({ select: { slug: true } });
   const slug = makeSlugUnique(
@@ -93,6 +94,11 @@ export async function createProjectAction(
       year,
       description,
       disciplineId,
+      // ⚠ `?? null`, not the value straight through. The schema hands back `undefined` for an empty
+      // box, and `undefined` in a Prisma `create` means "leave this column to its default" — which
+      // is the same NULL here, but would silently mean "don't touch it" in the update below. One
+      // spelling in both places, so the two can never diverge on what an empty box means.
+      liveUrl: liveUrl ?? null,
       // A brand new project has nothing to clear, so "unchanged" and "cleared" both mean no mark.
       markSvgUrl: markChange.kind === "stored" ? markChange.url : null,
       markStoragePath: markChange.kind === "stored" ? markChange.storagePath : null,
@@ -124,7 +130,7 @@ export async function updateProjectAction(
     return formErrorFromZod(parsed.error);
   }
 
-  const { title, client, year, description, tags, disciplineId } = parsed.data;
+  const { title, client, year, description, tags, liveUrl, disciplineId } = parsed.data;
 
   const existing = await prisma.project.findUnique({
     where: { id },
@@ -157,7 +163,18 @@ export async function updateProjectAction(
   await prisma.$transaction([
     prisma.project.update({
       where: { id },
-      data: { title, client, year, description, disciplineId, ...markData },
+      // ⚠ `liveUrl ?? null` for the same reason the create spells it out: emptying the box has to
+      // WRITE null. Passing `undefined` through would make Prisma skip the column, so clearing a
+      // link would appear to save and the old address would still be live on the site.
+      data: {
+        title,
+        client,
+        year,
+        description,
+        liveUrl: liveUrl ?? null,
+        disciplineId,
+        ...markData,
+      },
     }),
     prisma.projectTag.deleteMany({ where: { projectId: id } }),
     prisma.projectTag.createMany({

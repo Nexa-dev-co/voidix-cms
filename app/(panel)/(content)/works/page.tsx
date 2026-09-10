@@ -8,6 +8,7 @@ import { PageHeaderNote } from "@/components/ui/PageHeaderNote";
 import { ReorderControls } from "@/components/ui/ReorderControls";
 import { formatOrdinal } from "@/lib/content/contentPayload";
 import { prisma } from "@/lib/prisma";
+import { linkHostname } from "@/lib/text/linkHostname";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,13 @@ export default async function WorksPage() {
                     see which projects are in it without opening each one. */}
                 {!project.markSvgUrl && (
                   <span className="text-muted/50"> · no mark, grows its initial</span>
+                )}
+                {/* ⚠ Presence, not absence — the opposite of the mark note above it, and deliberately
+                    so. A project with no mark is unusual enough to be worth pointing at; a project
+                    with no link is the ordinary case, so flagging THAT would put a grey note on most
+                    rows and teach an editor to read it as an unfinished job. */}
+                {project.liveUrl && (
+                  <span className="text-muted/50"> · {linkHostname(project.liveUrl)}</span>
                 )}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">

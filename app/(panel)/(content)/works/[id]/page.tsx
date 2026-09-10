@@ -41,6 +41,7 @@ export default async function EditProjectPage(props: PageProps<"/works/[id]">) {
           description: project.description,
           tags: project.tags.map((tag) => tag.label),
           disciplineId: project.disciplineId,
+          liveUrl: project.liveUrl,
           markSvgUrl: project.markSvgUrl,
         }}
         disciplines={disciplines}

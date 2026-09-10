@@ -16,6 +16,9 @@ export const FIELD_LIMITS = {
   projectClient: 120,
   projectYear: 8,
   projectDescription: 500,
+  // Matches the column, and is generous on purpose — a case study often lives at a long path on a
+  // client's own site rather than at the root of a domain.
+  projectLiveUrl: 500,
   tagLabel: 40,
   tagCount: 8,
   faqQuestion: 200,
@@ -127,6 +130,31 @@ function optionalPlainLine(max: number, label: string) {
     .optional();
 }
 
+/**
+ * An optional link OUT of the site — empty, or an absolute `http(s)` address.
+ *
+ * ⚠ Empty becomes `undefined`, never `""`. Every caller writes the result straight into a nullable
+ * column and the site's only test is whether the field is set; an empty string passes that test and
+ * arrives as `<a href="">`, which silently reloads whatever page the visitor is on.
+ *
+ * The `http(s)` requirement is not pedantry — it is the same boundary `isExternalLinkUrl` draws for
+ * the footer. An editor who types `aphelion.com` has written a RELATIVE path, so the browser would
+ * resolve it against the site's own origin and hand the visitor a 404 on voidix.com. Better to
+ * refuse it at the one moment somebody is standing there able to fix it.
+ */
+function optionalExternalUrl(max: number, label: string) {
+  return z
+    .string()
+    .transform(toPlainLine)
+    .transform((value) => (value.length === 0 ? undefined : value))
+    .refine((value) => value === undefined || value.length <= max, {
+      message: `${label} must be ${max} characters or fewer.`,
+    })
+    .refine((value) => value === undefined || isExternalLinkUrl(value), {
+      message: `${label} must start with http:// or https://`,
+    });
+}
+
 /** An ordered list of chip labels parsed from one comma-or-newline separated input. */
 function chipList(maxLabel: number, maxCount: number, label: string) {
   return z
@@ -177,6 +205,10 @@ export const projectSchema = z.object({
   year: plainLine(FIELD_LIMITS.projectYear, "Year"),
   description: plainLine(FIELD_LIMITS.projectDescription, "Description"),
   tags: chipList(FIELD_LIMITS.tagLabel, FIELD_LIMITS.tagCount, "tag"),
+  // Optional, and most projects will legitimately never have one — behind a client's login, under
+  // an NDA, or simply taken down. `undefined` here becomes NULL in the column and no element on the
+  // site, which is why there is no "coming soon" state to design.
+  liveUrl: optionalExternalUrl(FIELD_LIMITS.projectLiveUrl, "Link"),
   disciplineId: uuidField("Discipline"),
 });
 

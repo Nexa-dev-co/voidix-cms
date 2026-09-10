@@ -1,0 +1,23 @@
+-- Give a project a link to the finished thing.
+--
+-- Until now a project could be described on the site but not visited: the works field carried a
+-- title, a client, a year, a paragraph and a row of tags, and nothing a reader could click to go and
+-- look at the work itself. This is that link.
+--
+-- ── Nullable, and null is the ordinary case ──────────────────────────────────────────────────────
+-- Plenty of this studio's work sits behind a client's login or under an NDA and has no address a
+-- visitor could be sent to. The site renders the link when there is one and renders nothing at all
+-- when there is not — there is no empty state to design, because there is no element.
+--
+-- ⚠ The panel stores NULL rather than '' for an empty box. The site's only test is `liveUrl ?`, and
+-- an empty string would pass it and reach an `<a href="">` that silently reloads the page.
+--
+-- ── ⚠ This is NOT `mark_svg_url`, despite both being project URLs ────────────────────────────────
+-- That one is published but deliberately never reaches a browser — the site's server dereferences it
+-- during ISR precisely so a `<project-ref>.supabase.co` address stays out of the HTML. This one is
+-- the opposite: it is an editor-supplied address on somebody else's domain, and reaching the browser
+-- as a real `<a href>` is the entire point of it. Nothing about the mark's handling applies here.
+--
+-- No backfill: every existing row is legitimately without a link until an editor adds one.
+
+ALTER TABLE "projects" ADD COLUMN "live_url" VARCHAR(500);

@@ -25,6 +25,8 @@ export interface ProjectFormValues {
   description: string;
   tags: string[];
   disciplineId: string;
+  /** Where the finished thing lives. Null is the ordinary case — the site simply shows no link. */
+  liveUrl?: string | null;
   /** The mark already stored for this project, so the field can show what it is replacing. */
   markSvgUrl?: string | null;
 }
@@ -99,6 +101,19 @@ export function ProjectForm({
         maxCount={FIELD_LIMITS.tagCount}
         error={state.fieldErrors.tags}
         hint="Comma separated. Order is the order they appear in."
+      />
+
+      {/* Optional, and the hint says so plainly — an editor who leaves it empty has not left
+          something unfinished, they have said this project has nowhere public to send anyone. */}
+      <TextField
+        label="Link"
+        rendersAs="the domain, under the tags"
+        name="liveUrl"
+        defaultValue={project?.liveUrl ?? ""}
+        max={FIELD_LIMITS.projectLiveUrl}
+        error={state.fieldErrors.liveUrl}
+        placeholder="https://example.com"
+        hint="Optional. Where the finished thing lives — leave it empty and the site shows no link at all. The site displays the domain, not the whole address."
       />
 
       <MarkUploadField

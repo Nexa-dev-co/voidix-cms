@@ -31,6 +31,17 @@ export interface PublishedProject {
   /// The site's `DisciplineId`. Renders as the project's type key and decides its CTA.
   discipline: string;
   /**
+   * Where the finished thing lives, or null.
+   *
+   * ⚠ The opposite of `markSvgUrl` below in the one way that matters, despite both being project
+   * URLs. That one is dereferenced by the site's server and must never reach a browser; this one is
+   * an editor-supplied address on somebody else's domain, and reaching the browser as a real
+   * `<a href>` is the entire point of it. Do not carry the mark's handling across to it.
+   *
+   * Null is the ordinary case, not a gap — the site renders no element rather than an empty state.
+   */
+  liveUrl: string | null;
+  /**
    * The uploaded mark, as a public Storage URL — or null, which is a real state: the site grows the
    * project's INITIAL instead of showing nothing.
    *
@@ -313,6 +324,7 @@ export async function buildContentPayload(): Promise<ContentPayload> {
       description: project.description,
       tags: project.tags.map((tag) => tag.label),
       discipline: project.discipline.key,
+      liveUrl: project.liveUrl,
       markSvgUrl: project.markSvgUrl,
     })),
     faq: faqEntries.map((entry, position) => ({
