@@ -9,13 +9,12 @@ export const dynamic = "force-dynamic";
 // What the site ships today: CONTACT_FOOTER_GROUPS from the contact section's content file, and
 // the two strings PageFooter.tsx still holds in its own source.
 //
-// ⚠ Only /about and /careers go anywhere real. The address is unverified, the four social
-// handles are unclaimed accounts, and /privacy and /terms do not exist — the site's own file
-// says so and says not to ship them. They are here because they give the footer its true shape;
-// the page warns about them rather than quietly presenting them as ready.
+// ⚠ The address is unverified and the four social handles are unclaimed accounts. They are here
+// because they give the footer its true shape; the page warns about them rather than quietly
+// presenting them as ready. The four document routes below are real.
 const FOOTER_DEFAULTS: FooterFormValues = {
-  tagline: "Software with its own gravity",
-  signOff: "Voidix — a software studio. Built with its own gravity.",
+  tagline: "Custom Software Development for Modern Businesses",
+  signOff: "Voidix — software with its own gravity.",
   linkGroups: [
     {
       title: "Studio",
@@ -65,13 +64,10 @@ export default async function FooterPage() {
       />
 
       <PageHeaderNote>
-        <strong className="text-fg">Most of these destinations are invented.</strong> Only{" "}
-        <code className="text-fg">/about</code> and <code className="text-fg">/careers</code> go
-        anywhere real — the address is unverified, the four social handles are unclaimed, and{" "}
-        <code className="text-fg">/privacy</code> and <code className="text-fg">/terms</code>{" "}
-        don&rsquo;t exist. They give the footer its true shape and should be replaced before real
-        visitors arrive: a dead social link on a studio site reads worse than no social link, and
-        a mailto that bounces is worse than a form.
+        <strong className="text-fg">The direct and social destinations still need verification.</strong>{" "}
+        The About, Careers, Privacy, and Terms routes are real. The email address and four social
+        handles are still placeholders and should be replaced before launch: a dead social link on
+        a studio site reads worse than no social link, and a mailto that bounces is worse than a form.
       </PageHeaderNote>
 
       <FooterForm

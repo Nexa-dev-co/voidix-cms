@@ -10,10 +10,10 @@ export const dynamic = "force-dynamic";
 // two EnquiryForm props it is rendered with. Shown until the section is saved here for the
 // first time, so the form is never rendered with empty required fields.
 const CONTACT_DEFAULTS: ContactFormValues = {
-  title: "Tell us what you are building.",
-  lead: "A paragraph is enough — what it is, who it is for, and what has to be true on the day it ships. You will get an answer from the people who would build it, not a sales desk.",
-  briefLabel: "What you are building",
-  submitLabel: "Send it",
+  title: "Tell us what you're building.",
+  lead: "You don't need a perfect technical specification. Tell us what you are building, who will use it, what problem it solves, and what needs to happen when it launches. We can help turn the idea into a practical product and development roadmap.",
+  briefLabel: "What are you building?",
+  submitLabel: "Start your project",
 };
 
 export default async function ContactPage() {

@@ -161,7 +161,7 @@ export async function buildAttentionReport(
  * One pass over the cursor events, grouped by the element AND where it was.
  *
  * ⚠ GROUPED BY THE STOP TOO, which fragments a target that appears at several stops into several
- * rows — and that is the entire point of the page. The same `Start this build` button sits on all
+ * rows — and that is the entire point of the page. The same `Discuss this service` button sits on all
  * four craft in the fleet, and "it was clicked forty times" is a fact nobody can act on until it is
  * split into which craft.
  *

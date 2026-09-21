@@ -13,12 +13,12 @@ export const dynamic = "force-dynamic";
 const ENQUIRY_FORM_DEFAULTS: EnquiryFormValues = {
   nameLabel: "Name",
   emailLabel: "Email",
-  phoneLabel: "Phone",
+  phoneLabel: "Mobile",
   sendingLabel: "Sending…",
-  sentMessage: "Sent. You will hear back from a person, either way.",
-  errorMessage: "That did not send. Try again in a moment.",
-  referenceSubjectSuffix: " — like {project}",
-  referenceBriefPrefix: "In the orbit of {project}. ",
+  sentMessage: "Your project details have been sent. We will review them and follow up.",
+  errorMessage: "Your project details could not be sent. Please try again in a moment.",
+  referenceSubjectSuffix: "— similar to {project}",
+  referenceBriefPrefix: "We are interested in work similar to {project}. ",
 };
 
 export default async function EnquiryFormPage() {
