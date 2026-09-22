@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { parseBlogBlocks } from "@/lib/content/blogBlocks";
+
 import { splitIntoParagraphs, toPlainLine } from "@/lib/text/plainText";
 
 // These caps are layout constraints, not paranoia. `name` sits in a four-across carousel
@@ -24,6 +26,12 @@ export const FIELD_LIMITS = {
   faqQuestion: 200,
   faqParagraph: 800,
   faqParagraphCount: 6,
+  blogTitle: 140,
+  blogSeoTitle: 160,
+  blogExcerpt: 320,
+  blogCategory: 60,
+  blogParagraph: 2000,
+  blogParagraphCount: 320,
   releaseNote: 200,
   // Contact. One title, not two lines — the site renders a single `CONTACT_TITLE`.
   contactTitle: 120,
@@ -224,6 +232,37 @@ export const faqSchema = z.object({
     .refine(
       (paragraphs) => paragraphs.every((paragraph) => paragraph.length <= FIELD_LIMITS.faqParagraph),
       { message: `Each paragraph must be ${FIELD_LIMITS.faqParagraph} characters or fewer.` },
+    ),
+});
+
+const calendarDate = (label: string) =>
+  z
+    .string()
+    .trim()
+    .refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value), {
+      message: `${label} must use YYYY-MM-DD.`,
+    })
+    .refine((value) => {
+      const parsed = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+    }, { message: `${label} must be a real calendar date.` });
+
+export const blogSchema = z.object({
+  title: plainLine(FIELD_LIMITS.blogTitle, "Title"),
+  seoTitle: plainLine(FIELD_LIMITS.blogSeoTitle, "SEO title"),
+  excerpt: plainLine(FIELD_LIMITS.blogExcerpt, "Excerpt"),
+  category: plainLine(FIELD_LIMITS.blogCategory, "Category"),
+  publishedOn: calendarDate("Publication date"),
+  body: z
+    .string()
+    .transform(parseBlogBlocks)
+    .refine((blocks) => blocks.length > 0, { message: "Body is required." })
+    .refine((blocks) => blocks.length <= FIELD_LIMITS.blogParagraphCount, {
+      message: `No more than ${FIELD_LIMITS.blogParagraphCount} content blocks.`,
+    })
+    .refine(
+      (blocks) => blocks.every((block) => block.body.length <= FIELD_LIMITS.blogParagraph),
+      { message: `Each content block must be ${FIELD_LIMITS.blogParagraph} characters or fewer.` },
     ),
 });
 

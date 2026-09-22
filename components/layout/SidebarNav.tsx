@@ -16,9 +16,10 @@ const CONTENT_ITEMS = [
   // visitor meets them — the homepage first, then the two pages it links out to.
   { href: "/about", label: "About", number: "06" },
   { href: "/careers", label: "Careers", number: "07" },
+  { href: "/blog", label: "Blog", number: "08" },
   // Last because it is not a section of the site — it is the form that appears inside six of
   // them, plus the vocabulary its subject line comes from.
-  { href: "/enquiry-form", label: "Enquiry form", number: "08" },
+  { href: "/enquiry-form", label: "Enquiry form", number: "09" },
 ] as const;
 
 // Separated from the content sections: leads are inbound work and releases are a log.

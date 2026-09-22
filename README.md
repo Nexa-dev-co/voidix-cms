@@ -3,16 +3,17 @@
 The content control panel for the [voidix](https://github.com/Nexa-dev-co/orbix-dev) site.
 
 It owns the **text** of five homepage sections — Services, Works, FAQ, Contact and Footer — the
-two document pages, About and Careers, the shared enquiry form those sections render, and the
-lead pipeline. What the website sends arrives in two inboxes of its own: **Inbox** for enquiries
+two document pages, About and Careers, the Blog archive, the shared enquiry form those sections
+render, and the lead pipeline. What the website sends arrives in two inboxes of its own: **Inbox** for enquiries
 and **Applications** for the careers form — neither is a lead until somebody says so, and an
 application never is. Models, hull palettes, lighting, rock geometry and scene tuning stay in the
 site's source, where the in-app `?tune` GUI writes them.
 
-All seven sections now exist on the site, and Careers was designed to end up here — its content
-file names this panel as where its roles are meant to come from. What the panel owns is the
-copy; the document pages' numbered section lists stay in the site's source, because each
-section's key is also its anchor and its station on the orbit rail.
+All eight areas now exist on the site. What the panel owns is the copy; the document pages'
+numbered section lists stay in the site's source, because each section's key is also its anchor
+and its station on the orbit rail. Blog posts are the exception: the panel owns the complete
+ordered article list, including each stable public slug, supplied SEO title, and controlled
+plain-text headings, paragraphs, and list items.
 
 Contact and Footer were modelled *before* their sections were built, and both guessed wrong —
 Contact assumed a two-line title, an eyebrow, a standalone email address and six form strings the
@@ -51,9 +52,11 @@ need.
 npm install
 npm run db:deploy   # applies prisma/migrations — schema, then row-level security
 npm run db:seed     # loads the copy currently live on the site
+npm run db:seed-blogs # loads only the approved 30-article library
 ```
 
-`db:seed` is idempotent — it upserts on slug, so re-running it will not duplicate anything.
+`db:seed` is idempotent — it upserts on slug, so re-running it will not duplicate anything. It
+also loads the thirty approved articles extracted into `prisma/data/blogArticles.json`.
 
 **3. The first admin**
 
@@ -77,10 +80,12 @@ npm run dev
 
 The editing tables are a **draft**. Nothing you type reaches the site until you press Publish.
 
-Publishing serialises the whole draft into one row in `content_releases` — an append-only log,
-so every release stays inspectable and nothing is ever overwritten — and then pings the site
-to rebuild. The overview compares draft against last release by value, so editing a field and
-typing the original back leaves you with nothing to publish.
+On the overview, choose the changed sections that are ready. Blog articles can also be selected
+one by one; publishing the whole Blog section is what applies deletions and reordering. The CMS
+merges those choices with the last release, then serialises one complete snapshot into
+`content_releases` — an append-only log, so every release stays inspectable and nothing is ever
+overwritten — and pings the site to rebuild. Editing a field and typing the original back leaves
+you with nothing to publish.
 
 ## What this panel deliberately cannot do
 
@@ -340,6 +345,7 @@ query, atomically consistent, and it can't catch the database mid-edit.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` | Creates a migration from schema changes (development) |
 | `npm run db:deploy` | Applies existing migrations (production / first setup) |
-| `npm run db:seed` | Loads the site's current copy |
+| `npm run db:seed` | Loads the site's current copy and the approved 30-article library |
+| `npm run db:seed-blogs` | Upserts only the approved 30-article library |
 | `npm run db:bootstrap-admin` | Promotes existing Auth users with no team row to ADMIN |
 | `npm run db:studio` | Prisma Studio |

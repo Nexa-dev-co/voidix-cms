@@ -19,7 +19,7 @@ Two jobs that share a login and nothing else:
 
 | | Purpose | Reaches the public site? |
 | --- | --- | --- |
-| **Site copy** | The text of five sections | Yes, when published |
+| **Site copy** | Homepage, document-page and blog text | Yes, when published |
 | **Leads** | Enquiries and sales follow-up | Never |
 
 The two are kept apart everywhere — separate nav groups, separate roles, separate tables.
@@ -27,10 +27,10 @@ Leads are never part of a release and never published; "publish" acts only on co
 
 ### Relationship to the site
 
-The site is a cinematic single-page WebGL experience. It has **not** been wired to this CMS.
-Publishing works today — it stores a release and records the site rebuild as *skipped* — but
-the site still reads its hardcoded TypeScript arrays. Connecting the two is a separate task
-(§11).
+The site's homepage is a cinematic single-page WebGL experience; its document and blog routes
+use ordinary native scroll. All published payload areas are wired to the site with local fallbacks
+for the fixed sections. Blog posts and career roles preserve a published empty list rather than
+inventing public content.
 
 ---
 
@@ -41,8 +41,10 @@ recording the outcome, because the outcome is visible in the code and the reason
 
 ### 2.1 Draft and release are separate layers
 
-**Decision:** the editing tables are a working draft. Publishing serialises the whole draft
-into one append-only `content_releases` row.
+**Decision:** the editing tables are a working draft. The editor chooses which changed sections
+to publish, with an additional per-article choice for Blog. The selection is merged into the last
+release and serialised as one complete, append-only `content_releases` row. Whole-Blog publishing
+applies additions, edits, deletions and order; article-only publishing changes just those slugs.
 
 **Why:** an editor must be able to leave a half-written FAQ answer for a week without it
 appearing on the site. A `published` boolean per row can't express that, because it can't
@@ -51,7 +53,8 @@ history and rollback for free, and means the site eventually reads one row inste
 six tables — atomically consistent, and impossible to catch mid-edit.
 
 **Cost:** the published shape is JSON, not normalised. Acceptable, because the site consumes
-it as typed arrays anyway.
+it as typed arrays anyway. A partial first release uses explicit empty/null states for unselected
+sections, and a partial later release refuses to proceed if the previous snapshot cannot be read.
 
 ### 2.2 A person is a `Contact`; an approach is an `Enquiry`
 
@@ -187,6 +190,16 @@ worse than telling them what will happen.
 **Why:** a stored ordinal drifts. Deleting item 2 of 4 leaves a gap unless something
 renumbers, and that something is a bug waiting to happen. Deriving it makes gaps impossible.
 
+### 2.10 Blog slugs are stable and article bodies use controlled text blocks
+
+**Decision:** creating a post derives a unique slug from its title; editing never changes it.
+The body is stored as ordered typed rows — section heading, subheading, paragraph, or list item —
+not HTML or general-purpose markdown.
+
+**Why:** the slug is the public URL and should not break when an editor improves a headline.
+Typed rows preserve the supplied articles' search-friendly hierarchy while keeping the panel's
+plain-text safety rule. Their ordinals are derived at publish time like every other ordered list.
+
 ---
 
 ## 3. Stack, and the version traps
@@ -221,7 +234,7 @@ not imports — a change on the site must be mirrored here.
 
 ## 4. Data model
 
-Five migrations, applied in order:
+Migrations are applied in timestamp order. The content and lead foundations include:
 
 | Migration | What it added |
 | --- | --- |
@@ -235,6 +248,8 @@ Five migrations, applied in order:
 | `20260812000000_about_and_careers` | The two document pages: About and Careers singletons, their ordered lists, career roles + bullets (+ RLS) |
 | `20260812000001_contact_footer_reshape` | Contact and Footer rebuilt to match the sections the site actually shipped; footer links become titled groups (+ RLS, incl. re-enabling it on the recreated `contact_section`) |
 | `20260812000002_inbox_applications_disciplines` | `disciplines` (seeded, linked from services and projects), `enquiry_form_content`, `submissions`, `career_applications` (+ RLS) |
+| `20260921002000_blog_posts` | Blog posts and ordered body paragraphs, plus the Journal footer link (+ RLS) |
+| `20260922000000_blog_article_structure` | Supplied SEO titles and controlled heading/paragraph/list block kinds |
 
 ### Content
 
@@ -261,6 +276,8 @@ careers_page          singleton — masthead, empty state, open application, for
   careers_commitment_options sort_order, label(40)
 career_roles          slug, sort_order, title(100), location(60), commitment(60), brief_seed(200)
   career_role_bullets   kind(OWNS|NEEDS|BONUS), sort_order, label
+blog_posts            slug UNIQUE, sort_order, title(140), seo_title(160), excerpt(320), category(60), published_on
+  blog_paragraphs       sort_order, kind, body(2000)    heading, paragraph, or list item
 disciplines           key UNIQUE(web|mobile|enterprise|ai), sort_order, label(60), brief_seed(300)
   services.discipline_id  →   projects.discipline_id →
 enquiry_form_content  singleton — field labels, sending/sent/failed, {project} templates
@@ -286,7 +303,7 @@ identical write paths.
 same columns and the same `FIELD_LIMITS` entries. The site shares one type across both pages;
 two sets of limits would be two places for them to drift.
 
-**Footer links have no `is_external` column.** The site flags four of its nine links as opening
+**Footer links have no `is_external` column.** The site flags four of its ten links as opening
 in a new tab, and that flag is a *function of the href*: `http(s)` leaves the site, a
 root-relative path and a `mailto:` do not. Derived in `contentPayload` like the ordinals, because
 a stored copy could disagree with the URL sitting next to it and no editor could tell which was
@@ -438,6 +455,7 @@ can use.
 | **FAQ** | Full CRUD + reorder | None — the freest section |
 | **Contact** | Edit copy + all form strings | Section doesn't exist on the site yet |
 | **Footer** | Tagline, copyright, two link lists | Doesn't exist on the site yet |
+| **Blog** | Full CRUD + reorder; controlled article structure | Slugs are generated on creation and remain stable; seed loads Articles 1–30 |
 
 **Why Services is locked:** a service is a vessel. Adding one needs a `.glb`, Draco
 compression, a hull palette and placement tuned through `?tune`. Worse, the site's
@@ -728,6 +746,7 @@ npm run typecheck           # tsc --noEmit
 npm run lint                # eslint directly (next lint is gone in 16)
 npm run db:deploy           # apply migrations
 npm run db:seed             # load the site's current copy (idempotent)
+npm run db:seed-blogs       # upsert only the approved 30-article library
 npm run db:bootstrap-admin  # promote existing Auth users with no team row to ADMIN
 npm run db:studio
 ```
@@ -924,7 +943,7 @@ leads table was capped at 768px too — its default columns alone come to ~974px
 already scrolled. Prose and forms wrap in `ReadingColumn`; tables and reports use the shell.
 
 **The sidebar earns its 240px from 1024px up.** Below that it is a horizontal strip along the
-top. On a tablet, a third of the screen spent on eight links is a third the table needed more.
+top. On a tablet, a third of the screen spent on nine content links is a third the table needed more.
 
 **The table scrolls sideways; the page scrolls down.** The two are exclusive and the reason is
 worth writing down, because it will come up again: `position: sticky` resolves against the

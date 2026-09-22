@@ -7,12 +7,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # voidix-cms
 
 Content control panel for the voidix site (`../orbix-dev`, repo `Nexa-dev-co/orbix-dev`). It
-edits **text only** — five homepage sections, Services / Works / FAQ / Contact / Footer, plus the
-two document pages, About and Careers — and a leads inbox. See `README.md` for what it
-deliberately cannot do and why.
+edits **text only** — five homepage sections, Services / Works / FAQ / Contact / Footer; the
+two document pages, About and Careers; and the Blog archive — plus a leads inbox. See `README.md`
+for what it deliberately cannot do and why.
 
-All seven now exist on the site. `careersContent.ts` names this panel as where its roles are
-meant to come from.
+All eight areas now exist on the site. Career roles and blog posts are published from this panel;
+an empty list is meaningful for both and must stay empty on the public site.
 
 **Contact and Footer were designed before their sections were built, and both guessed wrong.**
 Reshaped in `20260812000001` once the real sections landed: Contact lost a two-line title (the

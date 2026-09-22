@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
+import { parseBlogBlocks } from "@/lib/content/blogBlocks";
 import { findMarkdownWarnings } from "@/lib/text/plainText";
 import { isExternalLinkUrl, isSafeLinkUrl } from "@/lib/validation/contentSchemas";
 
@@ -340,6 +341,55 @@ export function ParagraphsField({
             {" · longest "}
             <span className={longestParagraph > maxParagraph ? "text-danger" : undefined}>
               {longestParagraph} / {maxParagraph}
+            </span>
+          </>
+        )}
+      </p>
+    </FieldShell>
+  );
+}
+
+/** A constrained article editor: headings and list items are structural markers, not Markdown. */
+export function ArticleBodyField({
+  name,
+  defaultValue = "",
+  maxBlock,
+  maxCount,
+  error,
+}: {
+  name: string;
+  defaultValue?: string;
+  maxBlock: number;
+  maxCount: number;
+  error?: string;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const blocks = parseBlogBlocks(value);
+  const longestBlock = blocks.reduce((longest, block) => Math.max(longest, block.body.length), 0);
+
+  return (
+    <FieldShell
+      label="Article body"
+      rendersAs="headings, paragraphs, and lists"
+      hint="Use ## for section headings, ### for subheadings, and - for list items. Plain text becomes a paragraph; HTML is never rendered."
+      error={error}
+      counter={{ current: blocks.length, max: maxCount }}
+    >
+      <textarea
+        name={name}
+        rows={22}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={"## Section heading\n\nOpening paragraph.\n\n- First point\n- Second point"}
+        className={`${CONTROL_CLASSES} resize-y font-mono leading-relaxed`}
+      />
+      <p className="text-[11px] text-muted">
+        {blocks.length} content block{blocks.length === 1 ? "" : "s"}
+        {longestBlock > 0 && (
+          <>
+            {" / longest "}
+            <span className={longestBlock > maxBlock ? "text-danger" : undefined}>
+              {longestBlock} / {maxBlock}
             </span>
           </>
         )}

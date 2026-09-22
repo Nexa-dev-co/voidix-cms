@@ -3,6 +3,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../generated/prisma/client";
+import { seedBlogArticles } from "./blogArticleSeed";
 
 // The live copy, lifted verbatim from the site's three data files:
 //   components/sections/ServicesDeck/deckServices.ts  → DECK_SERVICES
@@ -15,6 +16,10 @@ import { PrismaClient } from "../generated/prisma/client";
 // Seeding is idempotent: it upserts on `slug` (services, projects) and on question text
 // (FAQ), so re-running it will not duplicate rows or clobber an edit made in the panel to a
 // field the seed does not set.
+//
+// The thirty approved blog articles live in `prisma/data/blogArticles.json`, extracted from the
+// supplied Word source files by `scripts/extractBlogArticles.py`. Their headings and lists remain
+// typed content blocks; the public site never renders arbitrary document markup.
 //
 // Contact, Footer, About and Careers are deliberately absent. Their starting copy lives in the
 // page component that renders the form, so an editor sees it in the fields and nothing is
@@ -264,14 +269,17 @@ async function main() {
     });
   }
 
-  const [serviceCount, projectCount, faqCount] = await Promise.all([
+  await seedBlogArticles(prisma);
+
+  const [serviceCount, projectCount, faqCount, blogCount] = await Promise.all([
     prisma.service.count(),
     prisma.project.count(),
     prisma.faqEntry.count(),
+    prisma.blogPost.count(),
   ]);
 
   console.log(
-    `Seeded: ${serviceCount} services, ${projectCount} projects, ${faqCount} FAQ entries.`,
+    `Seeded: ${serviceCount} services, ${projectCount} projects, ${faqCount} FAQ entries, ${blogCount} blog articles.`,
   );
 }
 

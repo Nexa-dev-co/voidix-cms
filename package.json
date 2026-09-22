@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "db:seed-blogs": "tsx scripts/seedBlogArticles.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "db:bootstrap-admin": "tsx scripts/bootstrapAdmin.ts",

@@ -235,6 +235,49 @@ model FaqParagraph {
   @@map("faq_paragraphs")
 }
 
+/// One article in the public field journal. The slug is stable route identity: titles may be
+/// refined after publication without breaking inbound links.
+model BlogPost {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique @db.VarChar(80)
+  sortOrder   Int      @map("sort_order")
+  title       String   @db.VarChar(140)
+  seoTitle    String   @map("seo_title") @db.VarChar(160)
+  excerpt     String   @db.VarChar(320)
+  category    String   @db.VarChar(60)
+  publishedOn DateTime @map("published_on") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  paragraphs BlogParagraph[]
+
+  @@index([sortOrder])
+  @@index([publishedOn])
+  @@map("blog_posts")
+}
+
+/// One controlled plain-text content block. Presentation belongs to the public site, so the CMS
+/// publishes no HTML or general-purpose Markdown.
+model BlogParagraph {
+  id         String        @id @default(uuid()) @db.Uuid
+  blogPostId String        @map("blog_post_id") @db.Uuid
+  sortOrder  Int           @map("sort_order")
+  kind       BlogBlockKind @default(PARAGRAPH)
+  body       String
+
+  post BlogPost @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
+
+  @@index([blogPostId, sortOrder])
+  @@map("blog_paragraphs")
+}
+
+enum BlogBlockKind {
+  PARAGRAPH
+  HEADING_2
+  HEADING_3
+  LIST_ITEM
+}
+
 /// The Contact section's copy.
 ///
 /// A singleton — there is only ever one contact section, so it uses a fixed primary key

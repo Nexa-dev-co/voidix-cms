@@ -1,5 +1,13 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { buildContentPayload, parseReleasePayload, type ContentPayload } from "@/lib/content/contentPayload";
+import {
+  buildContentPayload,
+  parseReleasePayload,
+  type ContentPayload,
+} from "@/lib/content/contentPayload";
+import {
+  mergeSelectedContent,
+  type PublishSelection,
+} from "@/lib/content/publishSelection";
 import { prisma } from "@/lib/prisma";
 
 const REVALIDATE_TIMEOUT_MS = 10_000;
@@ -21,13 +29,25 @@ export interface PublishResult {
 export async function publishRelease(options: {
   publishedBy: string | null;
   note: string | null;
+  selection: PublishSelection;
 }): Promise<PublishResult> {
-  const payload = await buildContentPayload();
+  const [draftPayload, latestRelease] = await Promise.all([
+    buildContentPayload(),
+    prisma.contentRelease.findFirst({
+      orderBy: { version: "desc" },
+      select: { version: true, payload: true },
+    }),
+  ]);
 
-  const latestRelease = await prisma.contentRelease.findFirst({
-    orderBy: { version: "desc" },
-    select: { version: true },
-  });
+  const previousPayload = latestRelease ? parseReleasePayload(latestRelease.payload) : null;
+
+  // A partial release can only be safe when the unselected content has a readable snapshot to
+  // carry forward. Refuse to replace a malformed release with empty sections.
+  if (latestRelease && !previousPayload) {
+    throw new Error("The latest release could not be read, so selective publishing was cancelled.");
+  }
+
+  const payload = mergeSelectedContent(draftPayload, previousPayload, options.selection);
 
   const version = (latestRelease?.version ?? 0) + 1;
 

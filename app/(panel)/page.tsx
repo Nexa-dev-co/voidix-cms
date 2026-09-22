@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { requireMember } from "@/lib/auth";
 import { buildContentPayload, compareWithRelease } from "@/lib/content/contentPayload";
 import { getLatestReleasePayload } from "@/lib/content/publish";
+import { getSelectableBlogChanges } from "@/lib/content/publishSelection";
 import { prisma } from "@/lib/prisma";
 
 // Always read live — a cached dashboard would tell an editor they have nothing to publish
@@ -25,6 +26,7 @@ const SECTIONS = [
   { href: "/footer", label: "Footer", note: "Tagline, copyright and link lists." },
   { href: "/about", label: "About", note: "The whole /about document." },
   { href: "/careers", label: "Careers", note: "Open roles, and the copy around them." },
+  { href: "/blog", label: "Blog", note: "Articles in the public field journal." },
   {
     href: "/enquiry-form",
     label: "Enquiry form",
@@ -136,6 +138,7 @@ async function AdminSections() {
       prisma.project.count(),
       prisma.faqEntry.count(),
       prisma.careerRole.count(),
+      prisma.blogPost.count(),
       prisma.submission.count({ where: { promotedAt: null, dismissedAt: null } }),
       prisma.careerApplication.count({ where: { reviewedAt: null } }),
     ]),
@@ -146,8 +149,16 @@ async function AdminSections() {
   ]);
 
   const draftStatus = compareWithRelease(draftPayload, releasePayload);
-  const [serviceCount, projectCount, faqCount, roleCount, waitingCount, unreadApplicationCount] =
-    counts;
+  const blogChanges = getSelectableBlogChanges(draftPayload.blogs, releasePayload?.blogs ?? []);
+  const [
+    serviceCount,
+    projectCount,
+    faqCount,
+    roleCount,
+    blogCount,
+    waitingCount,
+    unreadApplicationCount,
+  ] = counts;
 
   // Contact, Footer and About are single records, so a row count would only ever read "1" and
   // tells an editor nothing. They show a saved/not-saved state instead. Careers has both, and
@@ -161,6 +172,7 @@ async function AdminSections() {
     "/footer": draftPayload.footer ? "saved" : "not set up",
     "/about": draftPayload.about ? "saved" : "not set up",
     "/careers": draftPayload.careers ? String(roleCount) : "not set up",
+    "/blog": String(blogCount),
     "/enquiry-form": draftPayload.enquiryForm ? "saved" : "not set up",
   };
 
@@ -211,7 +223,7 @@ async function AdminSections() {
         </section>
       )}
 
-      <PublishPanel draftStatus={draftStatus} />
+      <PublishPanel draftStatus={draftStatus} blogChanges={blogChanges} />
 
       <section>
         <h2 className="eyebrow mb-3">Site copy</h2>

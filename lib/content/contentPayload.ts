@@ -85,6 +85,17 @@ export interface PublishedFaqEntry {
   answer: string[];
 }
 
+export interface PublishedBlogPost {
+  index: string;
+  slug: string;
+  title: string;
+  seoTitle: string;
+  excerpt: string;
+  category: string;
+  publishedOn: string;
+  body: { kind: "PARAGRAPH" | "HEADING_2" | "HEADING_3" | "LIST_ITEM"; body: string }[];
+}
+
 /**
  * The contact section's copy.
  *
@@ -219,6 +230,8 @@ export interface ContentPayload {
   footer: PublishedFooter | null;
   about: PublishedAbout | null;
   careers: PublishedCareers | null;
+  /// Empty is a real state. The public archive must not substitute invented articles.
+  blogs: PublishedBlogPost[];
   /// The vocabulary services, works and the enquiry form all key off. Always present — the four
   /// rows are seeded by migration, not created by an editor.
   disciplines: PublishedDiscipline[];
@@ -268,6 +281,7 @@ export async function buildContentPayload(): Promise<ContentPayload> {
     hiringPhases,
     commitmentOptions,
     roles,
+    blogPosts,
     disciplines,
     enquiryForm,
   ] = await Promise.all([
@@ -302,6 +316,10 @@ export async function buildContentPayload(): Promise<ContentPayload> {
     prisma.careerRole.findMany({
       orderBy: { sortOrder: "asc" },
       include: { bullets: { orderBy: { sortOrder: "asc" } } },
+    }),
+    prisma.blogPost.findMany({
+      orderBy: { sortOrder: "asc" },
+      include: { paragraphs: { orderBy: { sortOrder: "asc" } } },
     }),
     prisma.discipline.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.enquiryFormContent.findUnique({ where: { id: SINGLETON_ROW_ID } }),
@@ -406,6 +424,16 @@ export async function buildContentPayload(): Promise<ContentPayload> {
           aboutInvite: careers.aboutInvite,
         }
       : null,
+    blogs: blogPosts.map((post, position) => ({
+      index: formatOrdinal(position),
+      slug: post.slug,
+      title: post.title,
+      seoTitle: post.seoTitle,
+      excerpt: post.excerpt,
+      category: post.category,
+      publishedOn: post.publishedOn.toISOString().slice(0, 10),
+      body: post.paragraphs.map((paragraph) => ({ kind: paragraph.kind, body: paragraph.body })),
+    })),
     disciplines: disciplines.map((discipline) => ({
       key: discipline.key,
       label: discipline.label,
@@ -455,6 +483,7 @@ export interface SectionChangeSummary {
   footer: boolean;
   about: boolean;
   careers: boolean;
+  blogs: boolean;
   enquiryForm: boolean;
 }
 
@@ -486,6 +515,7 @@ export function compareWithRelease(
         footer: true,
         about: true,
         careers: true,
+        blogs: true,
         enquiryForm: true,
       },
       neverPublished: true,
@@ -502,6 +532,7 @@ export function compareWithRelease(
     footer: !isDeepEqual(draft.footer, release.footer ?? null),
     about: !isDeepEqual(draft.about, release.about ?? null),
     careers: !isDeepEqual(draft.careers, release.careers ?? null),
+    blogs: !isDeepEqual(draft.blogs, release.blogs ?? []),
     // One badge covers both, because one page edits both: the form's strings and the four
     // discipline prefills are the same editing job and splitting them would report a change the
     // editor cannot act on separately.
@@ -552,6 +583,7 @@ export function parseReleasePayload(payload: unknown): ContentPayload | null {
     footer: candidate.footer ?? null,
     about: candidate.about ?? null,
     careers: candidate.careers ?? null,
+    blogs: candidate.blogs ?? [],
     // `[]` rather than null: disciplines are seeded by migration and always exist going forward,
     // so an older release simply had none recorded.
     disciplines: candidate.disciplines ?? [],

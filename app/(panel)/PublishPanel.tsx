@@ -5,13 +5,12 @@ import { useActionState } from "react";
 import { publishAction } from "@/app/(panel)/actions";
 import { FormMessage } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import type { DraftStatus } from "@/lib/content/contentPayload";
+import type { SelectableBlogChange } from "@/lib/content/publishSelection";
 import { IDLE_FORM_STATE } from "@/lib/forms/formState";
 import { FIELD_LIMITS } from "@/lib/validation/contentSchemas";
-import type { DraftStatus } from "@/lib/content/contentPayload";
 
-// Ordered as the sidebar orders them, so the badges read in the same sequence as the nav.
-// `Record` over the key union rather than a loose object: a section added to the payload and
-// forgotten here is a type error instead of a badge that silently never appears.
+// Ordered as the sidebar orders them, so the choices read in the same sequence as the nav.
 const SECTION_LABELS: Record<keyof DraftStatus["changedSections"], string> = {
   services: "Services",
   projects: "Works",
@@ -20,10 +19,17 @@ const SECTION_LABELS: Record<keyof DraftStatus["changedSections"], string> = {
   footer: "Footer",
   about: "About",
   careers: "Careers",
+  blogs: "Blog",
   enquiryForm: "Enquiry form",
 };
 
-export function PublishPanel({ draftStatus }: { draftStatus: DraftStatus }) {
+export function PublishPanel({
+  draftStatus,
+  blogChanges,
+}: {
+  draftStatus: DraftStatus;
+  blogChanges: SelectableBlogChange[];
+}) {
   const [state, formAction] = useActionState(publishAction, IDLE_FORM_STATE);
 
   const changedSections = (
@@ -61,28 +67,97 @@ export function PublishPanel({ draftStatus }: { draftStatus: DraftStatus }) {
 
       <p className="mb-5 text-sm leading-relaxed text-muted">
         {draftStatus.neverPublished
-          ? "Nothing has been published yet. The first release snapshots everything currently in the editor."
+          ? "Nothing has been published yet. Choose the sections or individual articles you want to put live first."
           : draftStatus.hasUnpublishedChanges
-            ? "Your edits are saved here but the site is still serving the last release. Publishing takes a snapshot and asks the site to rebuild."
+            ? "Choose only what is ready. Anything left unchecked stays exactly as it was in the last release."
             : "The draft matches the last release. There is nothing waiting to go out."}
       </p>
 
-      <form action={formAction} className="flex flex-col gap-3">
-        <FormMessage status={state.status} message={state.message} />
+      {draftStatus.hasUnpublishedChanges && (
+        <form action={formAction} className="flex flex-col gap-5">
+          <FormMessage status={state.status} message={state.message} />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="text"
-            name="note"
-            maxLength={FIELD_LIMITS.releaseNote}
-            placeholder="What changed? (optional)"
-            className="min-w-0 flex-1 rounded-sm border border-border bg-field px-3 py-2 text-sm text-fg placeholder:text-muted transition-colors duration-150 hover:border-border-strong focus:border-accent focus:outline-none"
-          />
-          <SubmitButton pendingLabel="Publishing…" variant="primary">
-            Publish
-          </SubmitButton>
-        </div>
-      </form>
+          <fieldset className="flex flex-col gap-2.5">
+            <legend className="mb-2 text-xs uppercase tracking-[0.14em] text-muted">
+              Publish whole sections
+            </legend>
+
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {changedSections.map((section) => (
+                <label
+                  key={section}
+                  className="flex cursor-pointer items-start gap-2.5 rounded-sm border border-border bg-field/50 px-3 py-2.5 transition-colors hover:border-border-strong"
+                >
+                  <input
+                    type="checkbox"
+                    name="sections"
+                    value={section}
+                    className="mt-0.5 size-3.5 accent-accent"
+                  />
+                  <span className="text-sm text-fg">
+                    {SECTION_LABELS[section]}
+                    {section === "footer" && (
+                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+                        Includes the Journal link.
+                      </span>
+                    )}
+                    {section === "blogs" && (
+                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+                        Applies article order and deletions too.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {blogChanges.length > 0 && (
+            <fieldset className="flex flex-col gap-2.5 border-t border-border pt-4">
+              <legend className="px-2 text-xs uppercase tracking-[0.14em] text-muted">
+                Or publish individual blog articles
+              </legend>
+              <p className="text-[11px] leading-relaxed text-muted">
+                Selected articles update in place. Other live articles, their order, and deletions
+                stay untouched.
+              </p>
+
+              <div className="max-h-64 overflow-y-auto rounded-sm border border-border bg-field/30">
+                {blogChanges.map((article) => (
+                  <label
+                    key={article.slug}
+                    className="flex cursor-pointer items-start gap-2.5 border-b border-border px-3 py-2.5 last:border-b-0 hover:bg-card"
+                  >
+                    <input
+                      type="checkbox"
+                      name="blogSlugs"
+                      value={article.slug}
+                      className="mt-0.5 size-3.5 shrink-0 accent-accent"
+                    />
+                    <span className="min-w-0 flex-1 text-sm text-fg">{article.title}</span>
+                    <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-muted">
+                      {article.state}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+            <input
+              type="text"
+              name="note"
+              maxLength={FIELD_LIMITS.releaseNote}
+              placeholder="What changed? (optional)"
+              className="min-w-0 flex-1 rounded-sm border border-border bg-field px-3 py-2 text-sm text-fg placeholder:text-muted transition-colors duration-150 hover:border-border-strong focus:border-accent focus:outline-none"
+            />
+            <SubmitButton pendingLabel="Publishing…" variant="primary">
+              Publish selected
+            </SubmitButton>
+          </div>
+        </form>
+      )}
     </section>
   );
 }
