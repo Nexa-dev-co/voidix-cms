@@ -1,11 +1,14 @@
 import type { Prisma } from "@/generated/prisma/client";
 import {
   buildContentPayload,
+  compareWithRelease,
   parseReleasePayload,
   type ContentPayload,
 } from "@/lib/content/contentPayload";
 import {
+  getSelectableBlogChanges,
   mergeSelectedContent,
+  resolvePublishSelection,
   type PublishSelection,
 } from "@/lib/content/publishSelection";
 import { prisma } from "@/lib/prisma";
@@ -30,6 +33,7 @@ export async function publishRelease(options: {
   publishedBy: string | null;
   note: string | null;
   selection: PublishSelection;
+  publishAll: boolean;
 }): Promise<PublishResult> {
   const [draftPayload, latestRelease] = await Promise.all([
     buildContentPayload(),
@@ -47,7 +51,15 @@ export async function publishRelease(options: {
     throw new Error("The latest release could not be read, so selective publishing was cancelled.");
   }
 
-  const payload = mergeSelectedContent(draftPayload, previousPayload, options.selection);
+  const draftStatus = compareWithRelease(draftPayload, previousPayload);
+  const blogChanges = getSelectableBlogChanges(draftPayload.blogs, previousPayload?.blogs ?? []);
+  const selection = resolvePublishSelection(
+    draftStatus.changedSections,
+    blogChanges.map((article) => article.slug),
+    options.selection,
+    options.publishAll,
+  );
+  const payload = mergeSelectedContent(draftPayload, previousPayload, selection);
 
   const version = (latestRelease?.version ?? 0) + 1;
 

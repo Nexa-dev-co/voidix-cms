@@ -15,16 +15,26 @@ export function SubmitButton({
   pendingLabel,
   variant = "primary",
   className = "",
+  name,
+  value,
 }: {
   children: string;
   pendingLabel?: string;
   variant?: "primary" | "secondary" | "danger";
   className?: string;
+  name?: string;
+  value?: string;
 }) {
   const { pending } = useFormStatus();
 
   return (
-    <button type="submit" disabled={pending} className={buttonClasses(variant, className)}>
+    <button
+      type="submit"
+      name={name}
+      value={value}
+      disabled={pending}
+      className={buttonClasses(variant, className)}
+    >
       {pending ? (pendingLabel ?? `${children}…`) : children}
     </button>
   );

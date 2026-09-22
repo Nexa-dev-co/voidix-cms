@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ContentPayload, PublishedBlogPost } from "../lib/content/contentPayload";
+import type {
+  ContentPayload,
+  DraftStatus,
+  PublishedBlogPost,
+} from "../lib/content/contentPayload";
 import * as publishSelectionModule from "../lib/content/publishSelection";
 import type { PublishSelection } from "../lib/content/publishSelection";
 
@@ -15,6 +19,16 @@ type SelectivePublishHelpers = {
     draft: PublishedBlogPost[],
     release: PublishedBlogPost[],
   ) => { slug: string; title: string; state: "new" | "changed" }[];
+  resolvePublishSelection: (
+    changedSections: Record<PublishSelection["sections"][number], boolean>,
+    selectableBlogSlugs: string[],
+    requested: PublishSelection,
+    publishAll: boolean,
+  ) => PublishSelection;
+  compareContentWithRelease: (
+    draft: ContentPayload,
+    release: ContentPayload | null,
+  ) => DraftStatus;
 };
 
 const helpers = publishSelectionModule as unknown as Partial<SelectivePublishHelpers>;
@@ -194,4 +208,126 @@ test("individual article choices ignore index-only changes", () => {
     { slug: "one", title: "One revised", state: "changed" },
     { slug: "three", title: "Three", state: "new" },
   ]);
+});
+
+test("publish all selects only sections with unpublished draft changes", () => {
+  assert.equal(typeof helpers.resolvePublishSelection, "function");
+
+  const selection = helpers.resolvePublishSelection!(
+    {
+      services: false,
+      projects: true,
+      faq: false,
+      contact: false,
+      footer: true,
+      about: false,
+      careers: false,
+      blogs: true,
+      enquiryForm: false,
+    },
+    ["draft-article"],
+    { sections: [], blogSlugs: [] },
+    true,
+  );
+
+  assert.deepEqual(selection, {
+    sections: ["projects", "footer", "blogs"],
+    blogSlugs: [],
+  });
+});
+
+test("normal publishing rejects sections and articles without draft changes", () => {
+  assert.equal(typeof helpers.resolvePublishSelection, "function");
+
+  const changedSections = {
+    services: false,
+    projects: true,
+    faq: false,
+    contact: false,
+    footer: false,
+    about: false,
+    careers: false,
+    blogs: true,
+    enquiryForm: false,
+  };
+
+  assert.throws(
+    () =>
+      helpers.resolvePublishSelection!(
+        changedSections,
+        ["changed-article"],
+        { sections: ["services"], blogSlugs: [] },
+        false,
+      ),
+    /no unpublished changes/i,
+  );
+
+  assert.throws(
+    () =>
+      helpers.resolvePublishSelection!(
+        changedSections,
+        ["changed-article"],
+        { sections: [], blogSlugs: ["already-published"] },
+        false,
+      ),
+    /no unpublished changes/i,
+  );
+});
+
+test("draft comparison ignores JSONB object-key ordering", () => {
+  assert.equal(typeof helpers.compareContentWithRelease, "function");
+
+  const draft = emptyPayload({
+    services: [
+      {
+        index: "01",
+        name: "Web systems",
+        eyebrow: "Design and engineering",
+        description: "Built around the work.",
+        capabilities: ["Strategy", "Delivery"],
+        discipline: "web",
+      },
+    ],
+    contact: {
+      title: "Start a project",
+      lead: "Tell us what needs to move.",
+      briefLabel: "Brief",
+      submitLabel: "Send",
+    },
+  });
+  const release = emptyPayload({
+    services: [
+      {
+        discipline: "web",
+        capabilities: ["Strategy", "Delivery"],
+        description: "Built around the work.",
+        eyebrow: "Design and engineering",
+        name: "Web systems",
+        index: "01",
+      },
+    ],
+    contact: {
+      submitLabel: "Send",
+      briefLabel: "Brief",
+      lead: "Tell us what needs to move.",
+      title: "Start a project",
+    },
+  });
+
+  assert.notEqual(JSON.stringify(draft.services), JSON.stringify(release.services));
+  assert.deepEqual(helpers.compareContentWithRelease!(draft, release), {
+    hasUnpublishedChanges: false,
+    changedSections: {
+      services: false,
+      projects: false,
+      faq: false,
+      contact: false,
+      footer: false,
+      about: false,
+      careers: false,
+      blogs: false,
+      enquiryForm: false,
+    },
+    neverPublished: false,
+  });
 });

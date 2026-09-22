@@ -32,8 +32,9 @@ export async function publishAction(
     .getAll("blogSlugs")
     .map(String)
     .filter((slug) => slug.length > 0);
+  const publishAll = formData.get("publishAll") === "true";
 
-  if (sections.length === 0 && blogSlugs.length === 0) {
+  if (!publishAll && sections.length === 0 && blogSlugs.length === 0) {
     return formError("Choose at least one section or blog article to publish.");
   }
 
@@ -44,6 +45,7 @@ export async function publishAction(
       publishedBy: user.email ?? null,
       note: parsedNote.data.length > 0 ? parsedNote.data : null,
       selection: { sections, blogSlugs },
+      publishAll,
     });
   } catch (error) {
     return formError(error instanceof Error ? error.message : "The release could not be published.");

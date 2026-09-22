@@ -1,4 +1,5 @@
 import type { CareerRoleBulletKind } from "@/generated/prisma/enums";
+import { compareContentWithRelease } from "@/lib/content/publishSelection";
 import { SINGLETON_ROW_ID } from "@/lib/content/singleton";
 import { prisma } from "@/lib/prisma";
 import { isExternalLinkUrl } from "@/lib/validation/contentSchemas";
@@ -504,54 +505,7 @@ export function compareWithRelease(
   draft: ContentPayload,
   release: ContentPayload | null,
 ): DraftStatus {
-  if (!release) {
-    return {
-      hasUnpublishedChanges: true,
-      changedSections: {
-        services: true,
-        projects: true,
-        faq: true,
-        contact: true,
-        footer: true,
-        about: true,
-        careers: true,
-        blogs: true,
-        enquiryForm: true,
-      },
-      neverPublished: true,
-    };
-  }
-
-  const changedSections: SectionChangeSummary = {
-    services: !isDeepEqual(draft.services, release.services),
-    projects: !isDeepEqual(draft.projects, release.projects),
-    faq: !isDeepEqual(draft.faq, release.faq),
-    // `?? null` because releases published before these sections existed have no key at all,
-    // and `undefined` vs `null` would otherwise read as a change on every comparison forever.
-    contact: !isDeepEqual(draft.contact, release.contact ?? null),
-    footer: !isDeepEqual(draft.footer, release.footer ?? null),
-    about: !isDeepEqual(draft.about, release.about ?? null),
-    careers: !isDeepEqual(draft.careers, release.careers ?? null),
-    blogs: !isDeepEqual(draft.blogs, release.blogs ?? []),
-    // One badge covers both, because one page edits both: the form's strings and the four
-    // discipline prefills are the same editing job and splitting them would report a change the
-    // editor cannot act on separately.
-    enquiryForm:
-      !isDeepEqual(draft.enquiryForm, release.enquiryForm ?? null) ||
-      !isDeepEqual(draft.disciplines, release.disciplines ?? []),
-  };
-
-  return {
-    hasUnpublishedChanges: Object.values(changedSections).some((hasChanged) => hasChanged),
-    changedSections,
-    neverPublished: false,
-  };
-}
-
-// Safe here because every payload value is a string, an array or a plain object built by
-// buildContentPayload — no dates, no undefined, and key order is fixed by the mapping above.
-function isDeepEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return compareContentWithRelease(draft, release);
 }
 
 /**

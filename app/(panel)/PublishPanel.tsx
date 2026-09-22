@@ -23,6 +23,8 @@ const SECTION_LABELS: Record<keyof DraftStatus["changedSections"], string> = {
   enquiryForm: "Enquiry form",
 };
 
+const SECTION_KEYS = Object.keys(SECTION_LABELS) as (keyof DraftStatus["changedSections"])[];
+
 export function PublishPanel({
   draftStatus,
   blogChanges,
@@ -32,9 +34,7 @@ export function PublishPanel({
 }) {
   const [state, formAction] = useActionState(publishAction, IDLE_FORM_STATE);
 
-  const changedSections = (
-    Object.keys(SECTION_LABELS) as (keyof DraftStatus["changedSections"])[]
-  ).filter((section) => draftStatus.changedSections[section]);
+  const changedSections = SECTION_KEYS.filter((section) => draftStatus.changedSections[section]);
 
   return (
     <section className="rounded-sm border border-border bg-card p-5">
@@ -83,39 +83,57 @@ export function PublishPanel({
             </legend>
 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {changedSections.map((section) => (
-                <label
-                  key={section}
-                  className="flex cursor-pointer items-start gap-2.5 rounded-sm border border-border bg-field/50 px-3 py-2.5 transition-colors hover:border-border-strong"
-                >
-                  <input
-                    type="checkbox"
-                    name="sections"
-                    value={section}
-                    className="mt-0.5 size-3.5 accent-accent"
-                  />
-                  <span className="text-sm text-fg">
-                    {SECTION_LABELS[section]}
-                    {section === "footer" && (
-                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
-                        Includes the Journal link.
+              {SECTION_KEYS.map((section) => {
+                const hasChanges = draftStatus.changedSections[section];
+
+                return (
+                  <label
+                    key={section}
+                    className={`flex items-start gap-2.5 rounded-sm border px-3 py-2.5 transition-colors ${
+                      hasChanges
+                        ? "cursor-pointer border-warning/40 bg-warning/5 hover:border-warning/70"
+                        : "cursor-not-allowed border-border bg-field/20 opacity-45"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      name="sections"
+                      value={section}
+                      disabled={!hasChanges}
+                      className="mt-0.5 size-3.5 accent-accent disabled:cursor-not-allowed"
+                    />
+                    <span className="min-w-0 flex-1 text-sm text-fg">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span>{SECTION_LABELS[section]}</span>
+                        <span
+                          className={`shrink-0 text-[9px] uppercase tracking-[0.12em] ${
+                            hasChanges ? "text-warning" : "text-muted"
+                          }`}
+                        >
+                          {hasChanges ? "Draft" : "Published"}
+                        </span>
                       </span>
-                    )}
-                    {section === "blogs" && (
-                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
-                        Applies article order and deletions too.
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
+                      {section === "footer" && hasChanges && (
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+                          Includes the Journal link.
+                        </span>
+                      )}
+                      {section === "blogs" && hasChanges && (
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+                          Applies article order and deletions too.
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </fieldset>
 
           {blogChanges.length > 0 && (
             <fieldset className="flex flex-col gap-2.5 border-t border-border pt-4">
               <legend className="px-2 text-xs uppercase tracking-[0.14em] text-muted">
-                Or publish individual blog articles
+                Publish individual blog articles
               </legend>
               <p className="text-[11px] leading-relaxed text-muted">
                 Selected articles update in place. Other live articles, their order, and deletions
@@ -152,9 +170,19 @@ export function PublishPanel({
               placeholder="What changed? (optional)"
               className="min-w-0 flex-1 rounded-sm border border-border bg-field px-3 py-2 text-sm text-fg placeholder:text-muted transition-colors duration-150 hover:border-border-strong focus:border-accent focus:outline-none"
             />
-            <SubmitButton pendingLabel="Publishing…" variant="primary">
-              Publish selected
-            </SubmitButton>
+            <div className="flex flex-wrap gap-2">
+              <SubmitButton pendingLabel="Publishing…" variant="primary">
+                Publish selected
+              </SubmitButton>
+              <SubmitButton
+                pendingLabel="Publishing…"
+                variant="secondary"
+                name="publishAll"
+                value="true"
+              >
+                Publish all changes
+              </SubmitButton>
+            </div>
           </div>
         </form>
       )}

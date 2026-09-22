@@ -16,18 +16,40 @@ export const dynamic = "force-dynamic";
 
 const SECTIONS = [
   {
+    key: "services",
     href: "/services",
     label: "Services",
     note: "Edit only — adding a vessel is a dev task.",
   },
-  { href: "/works", label: "Works", note: "Add, edit, reorder, remove." },
-  { href: "/faq", label: "FAQ", note: "Add, edit, reorder, remove." },
-  { href: "/contact", label: "Contact", note: "Section copy and every form string." },
-  { href: "/footer", label: "Footer", note: "Tagline, copyright and link lists." },
-  { href: "/about", label: "About", note: "The whole /about document." },
-  { href: "/careers", label: "Careers", note: "Open roles, and the copy around them." },
-  { href: "/blog", label: "Blog", note: "Articles in the public field journal." },
+  { key: "projects", href: "/works", label: "Works", note: "Add, edit, reorder, remove." },
+  { key: "faq", href: "/faq", label: "FAQ", note: "Add, edit, reorder, remove." },
   {
+    key: "contact",
+    href: "/contact",
+    label: "Contact",
+    note: "Section copy and every form string.",
+  },
+  {
+    key: "footer",
+    href: "/footer",
+    label: "Footer",
+    note: "Tagline, copyright and link lists.",
+  },
+  { key: "about", href: "/about", label: "About", note: "The whole /about document." },
+  {
+    key: "careers",
+    href: "/careers",
+    label: "Careers",
+    note: "Open roles, and the copy around them.",
+  },
+  {
+    key: "blogs",
+    href: "/blog",
+    label: "Blog",
+    note: "Articles in the public field journal.",
+  },
+  {
+    key: "enquiryForm",
     href: "/enquiry-form",
     label: "Enquiry form",
     note: "One form, six sections. Labels, messages, subjects.",
@@ -228,23 +250,36 @@ async function AdminSections() {
       <section>
         <h2 className="eyebrow mb-3">Site copy</h2>
         <div className="flex flex-col divide-y divide-border border-y border-border">
-          {SECTIONS.map((section) => (
-            <Link
-              key={section.href}
-              href={section.href}
-              className="group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50"
-            >
-              <div className="min-w-0">
-                <p className="text-sm text-fg transition-colors group-hover:text-accent">
-                  {section.label}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">{section.note}</p>
-              </div>
-              <span className="shrink-0 text-xs tabular-nums text-muted">
-                {sectionCounts[section.href]}
-              </span>
-            </Link>
-          ))}
+          {SECTIONS.map((section) => {
+            const hasUnpublishedDraft = draftStatus.changedSections[section.key];
+
+            return (
+              <Link
+                key={section.href}
+                href={section.href}
+                className={`group flex items-center justify-between gap-4 py-4 transition-colors duration-150 hover:bg-card/50 ${
+                  hasUnpublishedDraft ? "-mx-3 bg-warning/5 px-3" : ""
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm text-fg transition-colors group-hover:text-accent">
+                      {section.label}
+                    </p>
+                    {hasUnpublishedDraft && (
+                      <span className="rounded-sm border border-warning/30 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.12em] text-warning">
+                        Unpublished draft
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted">{section.note}</p>
+                </div>
+                <span className="shrink-0 text-xs tabular-nums text-muted">
+                  {sectionCounts[section.href]}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </section>
 

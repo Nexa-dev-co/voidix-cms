@@ -1,5 +1,8 @@
+import { isDeepStrictEqual } from "node:util";
+
 import type {
   ContentPayload,
+  DraftStatus,
   PublishedBlogPost,
   SectionChangeSummary,
 } from "@/lib/content/contentPayload";
@@ -33,6 +36,94 @@ const PUBLISH_SECTION_SET = new Set<string>(PUBLISH_SECTIONS);
 
 export function isPublishSection(value: string): value is PublishSection {
   return PUBLISH_SECTION_SET.has(value);
+}
+
+/**
+ * Compares payload values rather than their serialised key order.
+ *
+ * PostgreSQL JSONB normalises object keys when a release is stored. `JSON.stringify` therefore
+ * produces different strings for a draft and its own release even when every value is identical.
+ */
+export function compareContentWithRelease(
+  draft: ContentPayload,
+  release: ContentPayload | null,
+): DraftStatus {
+  if (!release) {
+    return {
+      hasUnpublishedChanges: true,
+      changedSections: Object.fromEntries(
+        PUBLISH_SECTIONS.map((section) => [section, true]),
+      ) as unknown as SectionChangeSummary,
+      neverPublished: true,
+    };
+  }
+
+  const changedSections: SectionChangeSummary = {
+    services: !isDeepStrictEqual(draft.services, release.services),
+    projects: !isDeepStrictEqual(draft.projects, release.projects),
+    faq: !isDeepStrictEqual(draft.faq, release.faq),
+    contact: !isDeepStrictEqual(draft.contact, release.contact ?? null),
+    footer: !isDeepStrictEqual(draft.footer, release.footer ?? null),
+    about: !isDeepStrictEqual(draft.about, release.about ?? null),
+    careers: !isDeepStrictEqual(draft.careers, release.careers ?? null),
+    blogs: !isDeepStrictEqual(draft.blogs, release.blogs ?? []),
+    enquiryForm:
+      !isDeepStrictEqual(draft.enquiryForm, release.enquiryForm ?? null) ||
+      !isDeepStrictEqual(draft.disciplines, release.disciplines ?? []),
+  };
+
+  return {
+    hasUnpublishedChanges: Object.values(changedSections).some(Boolean),
+    changedSections,
+    neverPublished: false,
+  };
+}
+
+/**
+ * Resolves the submitted controls against the current draft state.
+ *
+ * The UI disables published sections, but this server-side gate keeps a stale or hand-crafted
+ * request from creating a release for content that has no draft change. "Publish all" deliberately
+ * means every changed section, not every key in the payload.
+ */
+export function resolvePublishSelection(
+  changedSections: SectionChangeSummary,
+  selectableBlogSlugs: string[],
+  requested: PublishSelection,
+  publishAll: boolean,
+): PublishSelection {
+  if (publishAll) {
+    const sections = PUBLISH_SECTIONS.filter((section) => changedSections[section]);
+
+    if (sections.length === 0) {
+      throw new Error("There are no unpublished changes to publish.");
+    }
+
+    return { sections: [...sections], blogSlugs: [] };
+  }
+
+  const sections = [...new Set(requested.sections)];
+
+  for (const section of sections) {
+    if (!changedSections[section]) {
+      throw new Error(`${section} has no unpublished changes to publish.`);
+    }
+  }
+
+  const selectableSlugs = new Set(selectableBlogSlugs);
+  const blogSlugs = sections.includes("blogs") ? [] : [...new Set(requested.blogSlugs)];
+
+  for (const slug of blogSlugs) {
+    if (!selectableSlugs.has(slug)) {
+      throw new Error(`The blog article "${slug}" has no unpublished changes to publish.`);
+    }
+  }
+
+  if (sections.length === 0 && blogSlugs.length === 0) {
+    throw new Error("Select at least one section or blog article to publish.");
+  }
+
+  return { sections, blogSlugs };
 }
 
 export function createEmptyContentPayload(): ContentPayload {
