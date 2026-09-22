@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 // What the site ships today: CONTACT_FOOTER_GROUPS from the contact section's content file, and
 // the two strings PageFooter.tsx still holds in its own source.
 //
-// ⚠ The address is unverified and the four social handles are unclaimed accounts. They are here
-// because they give the footer its true shape; the page warns about them rather than quietly
-// presenting them as ready. The four document routes below are real.
+// ⚠ The X and GitHub destinations are unverified. They are here because they give the footer its
+// true shape; the page warns about them rather than quietly presenting them as ready. The public
+// email, LinkedIn, and the document routes below are real.
 const FOOTER_DEFAULTS: FooterFormValues = {
   tagline: "Custom Software Development for Modern Businesses",
   signOff: "Voidix — software with its own gravity.",
@@ -25,15 +25,14 @@ const FOOTER_DEFAULTS: FooterFormValues = {
     },
     {
       title: "Direct",
-      links: [{ label: "hello@voidix.studio", href: "mailto:hello@voidix.studio" }],
+      links: [{ label: "info@voidix.tech", href: "mailto:info@voidix.tech" }],
     },
     {
       title: "Elsewhere",
       links: [
         { label: "X", href: "https://x.com/voidixstudio" },
-        { label: "LinkedIn", href: "https://linkedin.com/company/voidixstudio" },
+        { label: "LinkedIn", href: "https://www.linkedin.com/company/voidix-tech" },
         { label: "GitHub", href: "https://github.com/voidixstudio" },
-        { label: "Dribbble", href: "https://dribbble.com/voidixstudio" },
       ],
     },
     {
@@ -64,10 +63,10 @@ export default async function FooterPage() {
       />
 
       <PageHeaderNote>
-        <strong className="text-fg">The direct and social destinations still need verification.</strong>{" "}
-        The About, Careers, Privacy, and Terms routes are real. The email address and four social
-        handles are still placeholders and should be replaced before launch: a dead social link on
-        a studio site reads worse than no social link, and a mailto that bounces is worse than a form.
+        <strong className="text-fg">Some direct and social destinations still need verification.</strong>{" "}
+        The public email, LinkedIn, and the About, Careers, Privacy, and Terms routes are real. X and
+        GitHub are still placeholders and should be replaced before launch: a dead social link on a
+        studio site reads worse than no social link.
       </PageHeaderNote>
 
       <FooterForm

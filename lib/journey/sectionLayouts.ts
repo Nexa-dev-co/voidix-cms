@@ -173,7 +173,7 @@ const SECTION_LAYOUTS: SectionLayout[] = [
       { label: "Enquiry form", text: "Name\nMobile\nEmail *\nWhat are you building?", x: 64.6, y: 19.5, width: 30.8, height: 42, role: "field" },
       { label: "Start your project", text: "START YOUR PROJECT", x: 67, y: 61.5, width: 6.5, height: 4.5, role: "action", align: "center" },
       { label: "Travel in time", text: "TRAVEL IN TIME", x: 44.5, y: 77.5, width: 11, height: 4.5, role: "action", align: "center" },
-      { label: "Footer", text: "Voidix · About · Careers · hello@voidix.studio · Privacy", x: 4.6, y: 86, width: 90.8, height: 9, role: "label" },
+      { label: "Footer", text: "Voidix · About · Careers · info@voidix.tech · Privacy", x: 4.6, y: 86, width: 90.8, height: 9, role: "label" },
     ],
   },
 ];

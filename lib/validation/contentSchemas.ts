@@ -44,7 +44,7 @@ export const FIELD_LIMITS = {
   footerSignOff: 160,
   footerGroupTitle: 40,
   footerGroupCount: 6,
-  // 60, not the old 40 — a link's label can be an email address ("hello@voidix.studio").
+  // 60, not the old 40 — a link's label can be an email address ("info@voidix.tech").
   footerLinkLabel: 60,
   footerLinkUrl: 500,
   footerLinksPerGroup: 8,
