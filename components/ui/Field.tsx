@@ -490,7 +490,7 @@ export function LinkGroupsField({
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder={
-          "[Studio]\nAbout | /about\nCareers | /careers\n\n[Elsewhere]\nX | https://x.com/voidixstudio"
+          "[Studio]\nAbout | /about\nCareers | /careers\n\n[Elsewhere]\nX | https://x.com/Voidix_tech"
         }
         className={`${CONTROL_CLASSES} resize-y font-mono text-xs leading-relaxed`}
       />

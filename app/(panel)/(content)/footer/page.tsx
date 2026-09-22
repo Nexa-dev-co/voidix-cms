@@ -9,9 +9,7 @@ export const dynamic = "force-dynamic";
 // What the site ships today: CONTACT_FOOTER_GROUPS from the contact section's content file, and
 // the two strings PageFooter.tsx still holds in its own source.
 //
-// ⚠ The X and GitHub destinations are unverified. They are here because they give the footer its
-// true shape; the page warns about them rather than quietly presenting them as ready. The public
-// email, LinkedIn, and the document routes below are real.
+// The public email, social profiles, and document routes below are verified.
 const FOOTER_DEFAULTS: FooterFormValues = {
   tagline: "Custom Software Development for Modern Businesses",
   signOff: "Voidix — software with its own gravity.",
@@ -25,14 +23,18 @@ const FOOTER_DEFAULTS: FooterFormValues = {
     },
     {
       title: "Direct",
-      links: [{ label: "info@voidix.tech", href: "mailto:info@voidix.tech" }],
+      links: [
+        { label: "info@voidix.tech", href: "mailto:info@voidix.tech" },
+        { label: "Call +1 (307) 317-9422", href: "tel:+13073179422" },
+        { label: "Text", href: "sms:+13073179422" },
+      ],
     },
     {
       title: "Elsewhere",
       links: [
-        { label: "X", href: "https://x.com/voidixstudio" },
+        { label: "X", href: "https://x.com/Voidix_tech" },
         { label: "LinkedIn", href: "https://www.linkedin.com/company/voidix-tech" },
-        { label: "GitHub", href: "https://github.com/voidixstudio" },
+        { label: "GitHub", href: "https://github.com/Voidix-tech" },
       ],
     },
     {
@@ -63,10 +65,9 @@ export default async function FooterPage() {
       />
 
       <PageHeaderNote>
-        <strong className="text-fg">Some direct and social destinations still need verification.</strong>{" "}
-        The public email, LinkedIn, and the About, Careers, Privacy, and Terms routes are real. X and
-        GitHub are still placeholders and should be replaced before launch: a dead social link on a
-        studio site reads worse than no social link.
+        <strong className="text-fg">The direct and social destinations are verified.</strong>{" "}
+        The public email, call and text number, X, LinkedIn, GitHub, and the About, Careers, Privacy,
+        and Terms routes are ready to publish.
       </PageHeaderNote>
 
       <FooterForm
