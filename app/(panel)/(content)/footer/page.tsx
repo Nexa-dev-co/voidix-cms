@@ -35,6 +35,7 @@ const FOOTER_DEFAULTS: FooterFormValues = {
         { label: "X", href: "https://x.com/Voidix_tech" },
         { label: "LinkedIn", href: "https://www.linkedin.com/company/voidix-tech" },
         { label: "GitHub", href: "https://github.com/Voidix-tech" },
+        { label: "Facebook", href: "https://www.facebook.com/Voidix.tech/" },
       ],
     },
     {
@@ -66,7 +67,7 @@ export default async function FooterPage() {
 
       <PageHeaderNote>
         <strong className="text-fg">The direct and social destinations are verified.</strong>{" "}
-        The public email, call and text number, X, LinkedIn, GitHub, and the About, Careers, Privacy,
+        The public email, call and text number, X, LinkedIn, GitHub, Facebook, and the About, Careers, Privacy,
         and Terms routes are ready to publish.
       </PageHeaderNote>
 

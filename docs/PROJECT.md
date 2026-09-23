@@ -250,6 +250,10 @@ Migrations are applied in timestamp order. The content and lead foundations incl
 | `20260812000002_inbox_applications_disciplines` | `disciplines` (seeded, linked from services and projects), `enquiry_form_content`, `submissions`, `career_applications` (+ RLS) |
 | `20260921002000_blog_posts` | Blog posts and ordered body paragraphs, plus the Journal footer link (+ RLS) |
 | `20260922000000_blog_article_structure` | Supplied SEO titles and controlled heading/paragraph/list block kinds |
+| `20260922001000_verified_contact_destinations` | Verified studio contact inbox and LinkedIn destination |
+| `20260922002000_verified_social_profiles` | Verified X and GitHub handle destinations |
+| `20260922003000_public_telephone` | Direct phone call and text links |
+| `20260923000000_facebook_footer_link` | Facebook page link in the Elsewhere footer group |
 
 ### Content
 
